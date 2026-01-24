@@ -10,14 +10,14 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/lc0rp/outlook-browser-cli/internal/browser"
-	"github.com/lc0rp/outlook-browser-cli/internal/config"
-	"github.com/lc0rp/outlook-browser-cli/internal/owa"
+	"github.com/lc0rp/cli-365/internal/browser"
+	"github.com/lc0rp/cli-365/internal/config"
+	"github.com/lc0rp/cli-365/internal/owa"
 )
 
 func main() {
 	app := &cli.App{
-		Name:  "outlook-browser-cli",
+		Name:  "cli-365",
 		Usage: "CLI for Outlook OWA via a managed browser",
 		Flags: []cli.Flag{
 			&cli.StringFlag{

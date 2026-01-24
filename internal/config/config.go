@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/lc0rp/outlook-browser-cli/internal/paths"
+	"github.com/lc0rp/cli-365/internal/paths"
 )
 
 type Config struct {

@@ -11,8 +11,8 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 
-	"github.com/lc0rp/outlook-browser-cli/internal/config"
-	"github.com/lc0rp/outlook-browser-cli/internal/paths"
+	"github.com/lc0rp/cli-365/internal/config"
+	"github.com/lc0rp/cli-365/internal/paths"
 )
 
 type RuntimeInfo struct {

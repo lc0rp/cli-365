@@ -1,4 +1,4 @@
-module github.com/lc0rp/outlook-browser-cli
+module github.com/lc0rp/cli-365
 
 go 1.24.4
 

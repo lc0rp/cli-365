@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-rod/rod"
 
-	"github.com/lc0rp/outlook-browser-cli/internal/paths"
+	"github.com/lc0rp/cli-365/internal/paths"
 )
 
 const (
@@ -95,7 +95,7 @@ func (c *Client) Close() error {
 
 // TokenCachePath returns the path to the token cache file.
 func TokenCachePath() string {
-	return filepath.Join(paths.StateDir(), "outlook-browser-cli", TokenCacheFile)
+	return filepath.Join(paths.StateDir(), "cli-365", TokenCacheFile)
 }
 
 // LoadTokens loads cached tokens from disk.

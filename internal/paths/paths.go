@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const appName = "outlook-browser-cli"
+const appName = "cli-365"
 
 func ConfigDir() string {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {

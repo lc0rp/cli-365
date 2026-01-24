@@ -1,4 +1,4 @@
-# Outlook Browser CLI
+# cli-365
 
 A command-line interface for Outlook Web App (OWA) using browser automation. This tool allows you to interact with your Outlook mail through the command line, leveraging OWA's web interface for authentication and API access.
 
@@ -12,7 +12,7 @@ A command-line interface for Outlook Web App (OWA) using browser automation. Thi
 ## Installation
 
 ```bash
-go install github.com/lc0rp/outlook-browser-cli/cmd/outlook-browser-cli@latest
+go install github.com/lc0rp/cli-365/cmd/cli-365@latest
 ```
 
 Or build from source:
@@ -20,15 +20,15 @@ Or build from source:
 ```bash
 git clone https://github.com/lc0rp/cli-365.git
 cd cli-365
-go build -o outlook-browser-cli ./cmd/outlook-browser-cli
+go build -o cli-365 ./cmd/cli-365
 ```
 
 ## Configuration
 
-Configuration file: `~/.config/outlook-browser-cli/config.yaml`
+Configuration file: `~/.config/cli-365/config.yaml`
 
 ```yaml
-profile_dir: "~/.config/outlook-browser-cli/profile"
+profile_dir: "~/.config/cli-365/profile"
 browser:
   headless: true
   no_sandbox: false  # Set true for containers/root users
@@ -49,58 +49,58 @@ security:
 
 ```bash
 # Start the managed browser
-outlook-browser-cli browser start
+cli-365 browser start
 
 # Check browser status
-outlook-browser-cli browser status
+cli-365 browser status
 
 # Stop the browser
-outlook-browser-cli browser stop
+cli-365 browser stop
 ```
 
 ### Authentication
 
 ```bash
 # Login (opens browser for authentication)
-outlook-browser-cli auth login
+cli-365 auth login
 
 # Check auth status
-outlook-browser-cli auth status
+cli-365 auth status
 
 # Logout (clear stored credentials)
-outlook-browser-cli auth logout
+cli-365 auth logout
 ```
 
 ### Mail Operations
 
 ```bash
 # Search messages
-outlook-browser-cli mail search "keyword"
-outlook-browser-cli mail search --limit 50 "meeting"
+cli-365 mail search "keyword"
+cli-365 mail search --limit 50 "meeting"
 
 # Get a thread/conversation
-outlook-browser-cli mail thread get <conversation-id>
+cli-365 mail thread get <conversation-id>
 
 # Create a draft
-outlook-browser-cli mail draft create --to "user@example.com" --subject "Hello" --body "Message body"
+cli-365 mail draft create --to "user@example.com" --subject "Hello" --body "Message body"
 
 # Update a draft
-outlook-browser-cli mail draft update <draft-id> --subject "New Subject" --body "Updated body"
+cli-365 mail draft update <draft-id> --subject "New Subject" --body "Updated body"
 
 # Delete a draft
-outlook-browser-cli mail draft delete <draft-id>
+cli-365 mail draft delete <draft-id>
 
 # Send a draft
-outlook-browser-cli mail draft send <draft-id>
+cli-365 mail draft send <draft-id>
 
 # Send a message directly (creates and sends)
-outlook-browser-cli mail send --to "user@example.com" --subject "Hello" --body "Message body"
+cli-365 mail send --to "user@example.com" --subject "Hello" --body "Message body"
 
 # List attachments for a message
-outlook-browser-cli mail attachments list <message-id>
+cli-365 mail attachments list <message-id>
 
 # Download an attachment
-outlook-browser-cli mail attachments download <attachment-id> [output-path]
+cli-365 mail attachments download <attachment-id> [output-path]
 ```
 
 ### JSON Output
@@ -108,8 +108,8 @@ outlook-browser-cli mail attachments download <attachment-id> [output-path]
 Add `--json` flag to any command for JSON output:
 
 ```bash
-outlook-browser-cli --json mail search "invoice"
-outlook-browser-cli --json auth status
+cli-365 --json mail search "invoice"
+cli-365 --json auth status
 ```
 
 ## How It Works
@@ -122,7 +122,7 @@ outlook-browser-cli --json auth status
 ## Architecture
 
 ```
-cmd/outlook-browser-cli/
+cmd/cli-365/
 ├── main.go              # CLI entrypoint and commands
 
 internal/
@@ -147,10 +147,10 @@ internal/
 go test ./...
 
 # Build
-go build ./cmd/outlook-browser-cli
+go build ./cmd/cli-365
 
 # Run with verbose output
-./outlook-browser-cli --help
+./cli-365 --help
 ```
 
 ## Requirements
@@ -161,8 +161,8 @@ go build ./cmd/outlook-browser-cli
 ## Notes
 
 - The `no_sandbox: true` option may be needed when running as root or in containers
-- Browser profile is stored in `~/.config/outlook-browser-cli/profile/` for session persistence
-- Tokens are cached in `~/.local/state/outlook-browser-cli/tokens.json`
+- Browser profile is stored in `~/.config/cli-365/profile/` for session persistence
+- Tokens are cached in `~/.local/state/cli-365/tokens.json`
 
 ## License
 

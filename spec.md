@@ -1,4 +1,4 @@
-# Outlook Browser CLI — Spec (MVP)
+# cli-365 — Spec (MVP)
 
 ## MVP (Mail)
 - Search threads/messages
@@ -26,10 +26,10 @@
 - Normalize to CLI models (threads/messages/attachments)
 
 ## Config Layout
-Path: `$XDG_CONFIG_HOME/outlook-browser-cli/config.yaml`
+Path: `$XDG_CONFIG_HOME/cli-365/config.yaml`
 
 ```yaml
-profile_dir: "~/.config/outlook-browser-cli/profile"
+profile_dir: "~/.config/cli-365/profile"
 browser:
   headless: true
   no_sandbox: false  # set true for container/host without sandbox support
