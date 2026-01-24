@@ -45,6 +45,21 @@ func Start(_ context.Context, cfg config.Config) (*RuntimeInfo, error) {
 	}
 
 	l := launcher.New().Headless(cfg.Browser.Headless).UserDataDir(profileDir)
+	if !cfg.Browser.Headless {
+		l = l.Delete("no-startup-window")
+		l = l.Leakless(false)
+		l = l.Delete("disable-breakpad")
+		l = l.Set("disable-gpu")
+		l = l.Set("use-gl", "swiftshader")
+		l = l.Set("enable-logging")
+		logDir := filepath.Join(paths.StateDir(), "cli-365")
+		_ = os.MkdirAll(logDir, 0o700)
+		l = l.Set("log-file", filepath.Join(logDir, "chromium.log"))
+		l = l.Set("v", "1")
+		if stderrLog, err := os.OpenFile(filepath.Join(logDir, "chromium.stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			l = l.Logger(stderrLog)
+		}
+	}
 	if cfg.Browser.NoSandbox {
 		l = l.NoSandbox(true)
 	}

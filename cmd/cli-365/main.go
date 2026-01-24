@@ -35,6 +35,7 @@ func main() {
 			authCommand(),
 			browserCommand(),
 			mailCommand(),
+			debugCommand(),
 		},
 	}
 
@@ -67,28 +68,11 @@ func getOWAClient(c *cli.Context) (*owa.Client, error) {
 		return nil, err
 	}
 
-	// Check if we have cached tokens
-	tokens, err := owa.LoadTokens()
-	if err == nil && tokens != nil && tokens.Canary != "" {
-		client.SetTokens(tokens)
-		return client, nil
-	}
-
-	// Try to discover tokens from page
-	if err := owa.EnsureLoggedIn(client.Page()); err != nil {
-		return nil, err
-	}
-
-	tokens, err = owa.DiscoverTokens(client.Page())
+	tokens, err := owa.LoadOrDiscoverTokens(client.Page())
 	if err != nil {
 		return nil, err
 	}
-
 	client.SetTokens(tokens)
-	if err := owa.SaveTokens(tokens); err != nil {
-		// Non-fatal, just warn
-		fmt.Fprintf(os.Stderr, "warning: failed to cache tokens: %v\n", err)
-	}
 
 	return client, nil
 }

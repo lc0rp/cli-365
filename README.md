@@ -112,6 +112,16 @@ cli-365 --json mail search "invoice"
 cli-365 --json auth status
 ```
 
+### Debug / Discovery
+
+```bash
+# Launch browser, wait for login, discover template-like values, and probe fetch
+cli-365 debug discover --out ./owa-templates.json
+
+# Include network-level request log
+cli-365 debug discover --netlog ./owa-netlog.json
+```
+
 ## How It Works
 
 1. **Browser Session**: The CLI manages a Chromium browser instance using rod (Go CDP client)

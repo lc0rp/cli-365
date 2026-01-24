@@ -28,11 +28,11 @@ type Client struct {
 
 // Tokens holds the extracted OWA authentication tokens.
 type Tokens struct {
-	Canary       string    `json:"canary"`
-	Bearer       string    `json:"bearer,omitempty"`
-	UserEmail    string    `json:"user_email,omitempty"`
-	ExtractedAt  time.Time `json:"extracted_at"`
-	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	Canary      string    `json:"canary"`
+	Bearer      string    `json:"bearer,omitempty"`
+	UserEmail   string    `json:"user_email,omitempty"`
+	ExtractedAt time.Time `json:"extracted_at"`
+	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 }
 
 // NewClient creates a new OWA client from an existing browser connection.
@@ -125,6 +125,36 @@ func SaveTokens(t *Tokens) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
+// LoadOrDiscoverTokens loads cached tokens if available, otherwise re-discovers
+// tokens from a logged-in page and attempts to save them.
+func LoadOrDiscoverTokens(page *rod.Page) (*Tokens, error) {
+	tokens, err := LoadTokens()
+	if err == nil && tokens != nil && tokens.Canary != "" {
+		return tokens, nil
+	}
+
+	if page == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("tokens not found and page is nil")
+	}
+
+	if !IsLoggedIn(page) {
+		return nil, errors.New("not logged in - run 'auth login' first")
+	}
+
+	tokens, err = DiscoverTokens(page)
+	if err != nil {
+		return nil, err
+	}
+
+	// Non-fatal if caching fails; caller can still proceed with in-page tokens.
+	_ = SaveTokens(tokens)
+
+	return tokens, nil
+}
+
 // ClearTokens removes the cached tokens.
 func ClearTokens() error {
 	path := TokenCachePath()
@@ -135,8 +165,7 @@ func ClearTokens() error {
 }
 
 func isOWAURL(url string) bool {
-	return len(url) > 0 && (
-		contains(url, "outlook.office.com/mail") ||
+	return len(url) > 0 && (contains(url, "outlook.office.com/mail") ||
 		contains(url, "outlook.office365.com/mail") ||
 		contains(url, "outlook.live.com/mail"))
 }

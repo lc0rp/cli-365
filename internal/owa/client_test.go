@@ -55,6 +55,46 @@ func TestSaveAndLoadTokens(t *testing.T) {
 	}
 }
 
+func TestLoadOrDiscoverTokensWithCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origXDG := os.Getenv("XDG_STATE_HOME")
+	os.Setenv("XDG_STATE_HOME", tmpDir)
+	defer os.Setenv("XDG_STATE_HOME", origXDG)
+
+	tokens := &Tokens{
+		Canary:      "cached-canary",
+		Bearer:      "Bearer cached-token",
+		UserEmail:   "cached@example.com",
+		ExtractedAt: time.Now().Truncate(time.Second),
+	}
+
+	if err := SaveTokens(tokens); err != nil {
+		t.Fatalf("SaveTokens() error = %v", err)
+	}
+
+	loaded, err := LoadOrDiscoverTokens(nil)
+	if err != nil {
+		t.Fatalf("LoadOrDiscoverTokens() error = %v", err)
+	}
+	if loaded.Canary != tokens.Canary {
+		t.Errorf("Canary mismatch: got %q, want %q", loaded.Canary, tokens.Canary)
+	}
+}
+
+func TestLoadOrDiscoverTokensWithoutCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origXDG := os.Getenv("XDG_STATE_HOME")
+	os.Setenv("XDG_STATE_HOME", tmpDir)
+	defer os.Setenv("XDG_STATE_HOME", origXDG)
+
+	_, err := LoadOrDiscoverTokens(nil)
+	if err == nil {
+		t.Error("LoadOrDiscoverTokens() should return error without cache and nil page")
+	}
+}
+
 func TestClearTokens(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -137,14 +177,14 @@ func TestNewClient(t *testing.T) {
 
 func TestClientSetTokens(t *testing.T) {
 	client := NewClient(nil)
-	
+
 	tokens := &Tokens{
 		Canary:    "test-canary",
 		UserEmail: "test@example.com",
 	}
-	
+
 	client.SetTokens(tokens)
-	
+
 	got := client.Tokens()
 	if got == nil {
 		t.Fatal("Tokens() returned nil after SetTokens()")
