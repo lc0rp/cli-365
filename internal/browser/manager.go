@@ -44,6 +44,9 @@ func Start(_ context.Context, cfg config.Config) (*RuntimeInfo, error) {
 	}
 
 	l := launcher.New().Headless(cfg.Browser.Headless).UserDataDir(profileDir)
+	if cfg.Browser.NoSandbox {
+		l = l.NoSandbox(true)
+	}
 	url, err := l.Launch()
 	if err != nil {
 		return nil, err

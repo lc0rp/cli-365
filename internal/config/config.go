@@ -18,6 +18,7 @@ type Config struct {
 
 type BrowserConfig struct {
 	Headless    bool   `yaml:"headless"`
+	NoSandbox   bool   `yaml:"no_sandbox"`
 	CDPEndpoint string `yaml:"cdp_endpoint"`
 }
 
@@ -38,6 +39,7 @@ func Default() Config {
 		ProfileDir: paths.ProfileDir(),
 		Browser: BrowserConfig{
 			Headless:    true,
+			NoSandbox:   false,
 			CDPEndpoint: "",
 		},
 		Auth: AuthConfig{

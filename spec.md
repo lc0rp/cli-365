@@ -32,6 +32,7 @@ Path: `$XDG_CONFIG_HOME/outlook-browser-cli/config.yaml`
 profile_dir: "~/.config/outlook-browser-cli/profile"
 browser:
   headless: true
+  no_sandbox: false  # set true for container/host without sandbox support
   cdp_endpoint: ""   # empty => auto-start managed browser
 auth:
   tenant: "common"
