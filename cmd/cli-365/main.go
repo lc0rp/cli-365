@@ -334,6 +334,71 @@ func mailCommand() *cli.Command {
 				},
 			},
 			{
+				Name:      "view",
+				Usage:     "View a single message",
+				ArgsUsage: "<message-id>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() < 1 {
+						return cli.Exit("message ID required", 1)
+					}
+
+					client, err := getOWAClient(c)
+					if err != nil {
+						return err
+					}
+
+					messageID := c.Args().First()
+					msg, err := owa.GetMessage(client.Page(), client.Tokens().Canary, messageID)
+					if err != nil {
+						return err
+					}
+
+					if c.Bool("json") {
+						return outputJSON(msg)
+					}
+
+					from := ""
+					if msg.From != nil {
+						from = msg.From.Address
+						if msg.From.Name != "" {
+							from = fmt.Sprintf("%s <%s>", msg.From.Name, msg.From.Address)
+						}
+					}
+
+					fmt.Printf("From: %s\n", from)
+					fmt.Printf("Subject: %s\n", msg.Subject)
+					fmt.Printf("Date: %s\n", msg.DateTimeSent)
+
+					if len(msg.ToRecipients) > 0 {
+						fmt.Print("To: ")
+						for i, r := range msg.ToRecipients {
+							if i > 0 {
+								fmt.Print(", ")
+							}
+							if r.Name != "" {
+								fmt.Printf("%s <%s>", r.Name, r.Address)
+							} else {
+								fmt.Print(r.Address)
+							}
+						}
+						fmt.Println()
+					}
+
+					if msg.HasAttachments {
+						fmt.Printf("Attachments: %d\n", len(msg.Attachments))
+					}
+
+					fmt.Println()
+					if msg.Body != nil {
+						fmt.Println(msg.Body.Value)
+					} else if msg.BodyPreview != "" {
+						fmt.Println(msg.BodyPreview)
+					}
+
+					return nil
+				},
+			},
+			{
 				Name:  "thread",
 				Usage: "Thread operations",
 				Subcommands: []*cli.Command{

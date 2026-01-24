@@ -78,6 +78,9 @@ cli-365 auth logout
 cli-365 mail search "keyword"
 cli-365 mail search --limit 50 "meeting"
 
+# View a single message
+cli-365 mail view <message-id>
+
 # Get a thread/conversation
 cli-365 mail thread get <conversation-id>
 
