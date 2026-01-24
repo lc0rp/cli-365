@@ -50,6 +50,39 @@ func TestOWAEndpoint(t *testing.T) {
 	}
 }
 
+func TestOWAEndpointForURL(t *testing.T) {
+	tests := []struct {
+		pageURL string
+		action  string
+		want    string
+	}{
+		{
+			pageURL: "https://outlook.cloud.microsoft/mail/",
+			action:  "FindItem",
+			want:    "https://outlook.cloud.microsoft/owa/service.svc?action=FindItem&app=Mail&n=0",
+		},
+		{
+			pageURL: "https://outlook.office.com/mail/",
+			action:  "FindItem",
+			want:    "https://outlook.office.com/owa/0/service.svc?action=FindItem&app=Mail&n=0",
+		},
+		{
+			pageURL: "https://outlook.office365.com/mail/",
+			action:  "FindItem",
+			want:    "https://outlook.office365.com/owa/0/service.svc?action=FindItem&app=Mail&n=0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pageURL, func(t *testing.T) {
+			got := OWAEndpointForURL(tt.pageURL, tt.action)
+			if got != tt.want {
+				t.Errorf("OWAEndpointForURL(%q) = %q, want %q", tt.pageURL, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewOWARequest(t *testing.T) {
 	body := map[string]string{"test": "value"}
 	req := NewOWARequest(body)

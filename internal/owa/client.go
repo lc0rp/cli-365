@@ -53,16 +53,31 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("failed to get pages: %w", err)
 	}
 
-	// Look for existing OWA page
+	// Look for existing OWA page with valid canary
+	var firstOWA *rod.Page
 	for _, p := range pages {
 		info, err := p.Info()
 		if err != nil {
 			continue
 		}
-		if isOWAURL(info.URL) {
+		if !isOWAURL(info.URL) {
+			continue
+		}
+		if firstOWA == nil {
+			firstOWA = p
+		}
+		canary, _ := getCanaryFromCookies(p)
+		if canary == "" {
+			canary, _ = getCanaryFromPage(p)
+		}
+		if canary != "" {
 			c.page = p
 			return nil
 		}
+	}
+	if firstOWA != nil {
+		c.page = firstOWA
+		return nil
 	}
 
 	// Create new page if none found
@@ -140,10 +155,6 @@ func LoadOrDiscoverTokens(page *rod.Page) (*Tokens, error) {
 		return nil, errors.New("tokens not found and page is nil")
 	}
 
-	if !IsLoggedIn(page) {
-		return nil, errors.New("not logged in - run 'auth login' first")
-	}
-
 	tokens, err = DiscoverTokens(page)
 	if err != nil {
 		return nil, err
@@ -167,7 +178,8 @@ func ClearTokens() error {
 func isOWAURL(url string) bool {
 	return len(url) > 0 && (contains(url, "outlook.office.com/mail") ||
 		contains(url, "outlook.office365.com/mail") ||
-		contains(url, "outlook.live.com/mail"))
+		contains(url, "outlook.live.com/mail") ||
+		contains(url, "outlook.cloud.microsoft/mail"))
 }
 
 func contains(s, substr string) bool {

@@ -11,72 +11,7 @@ import (
 
 // SearchMessages searches for messages using OWA FindItem.
 func SearchMessages(page *rod.Page, canary string, query string, folderID string, maxResults int) (*SearchResult, error) {
-	if maxResults <= 0 {
-		maxResults = 50
-	}
-
-	// Build the search request body
-	body := map[string]interface{}{
-		"ItemShape": map[string]interface{}{
-			"BaseShape": "IdOnly",
-			"AdditionalProperties": []map[string]interface{}{
-				{"FieldURI": "item:Subject"},
-				{"FieldURI": "item:DateTimeReceived"},
-				{"FieldURI": "item:DateTimeSent"},
-				{"FieldURI": "message:From"},
-				{"FieldURI": "message:ToRecipients"},
-				{"FieldURI": "item:HasAttachments"},
-				{"FieldURI": "item:Importance"},
-				{"FieldURI": "message:IsRead"},
-				{"FieldURI": "item:Preview"},
-			},
-		},
-		"Paging": map[string]interface{}{
-			"__type":     "IndexedPageView:#Exchange",
-			"BasePoint":  "Beginning",
-			"Offset":     0,
-			"MaxEntriesReturned": maxResults,
-		},
-		"ViewFilter":      "All",
-		"FocusedViewFilter": -1,
-		"SortOrder": []map[string]interface{}{
-			{
-				"Order":    "Descending",
-				"Path": map[string]interface{}{
-					"__type":   "PropertyUri:#Exchange",
-					"FieldURI": "item:DateTimeReceived",
-				},
-			},
-		},
-	}
-
-	// Set folder
-	if folderID != "" {
-		body["ParentFolderIds"] = []map[string]interface{}{
-			{"__type": "FolderId:#Exchange", "Id": folderID},
-		}
-	} else {
-		body["ParentFolderIds"] = []map[string]interface{}{
-			{"__type": "DistinguishedFolderId:#Exchange", "Id": "inbox"},
-		}
-	}
-
-	// Add query restriction if provided
-	if query != "" {
-		body["Restriction"] = map[string]interface{}{
-			"__type": "Contains:#Exchange",
-			"ContainmentMode": "Substring",
-			"ContainmentComparison": "IgnoreCase",
-			"Item": map[string]interface{}{
-				"__type": "PropertyUri:#Exchange",
-				"FieldURI": "item:Subject",
-			},
-			"Constant": map[string]interface{}{
-				"__type": "ConstantValue:#Exchange",
-				"Value": query,
-			},
-		}
-	}
+	body := buildSearchMessagesBody(query, folderID, maxResults)
 
 	resp, err := CallOWAAction(page, canary, "FindItem", body)
 	if err != nil {
@@ -95,6 +30,95 @@ func SearchMessages(page *rod.Page, canary string, query string, folderID string
 	return result, nil
 }
 
+// SearchMessagesWithBearer searches for messages using bearer auth only.
+func SearchMessagesWithBearer(page *rod.Page, bearer string, query string, folderID string, maxResults int) (*SearchResult, error) {
+	body := buildSearchMessagesBody(query, folderID, maxResults)
+
+	resp, err := CallOWAActionWithBearer(page, bearer, "FindItem", body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Status != 200 {
+		return nil, fmt.Errorf("search failed with status %d: %s", resp.Status, resp.StatusText)
+	}
+
+	result, err := UnmarshalSearchResponse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	return result, nil
+}
+
+func buildSearchMessagesBody(query string, folderID string, maxResults int) map[string]interface{} {
+	if maxResults <= 0 {
+		maxResults = 50
+	}
+
+	body := map[string]interface{}{
+		"ItemShape": map[string]interface{}{
+			"BaseShape": "IdOnly",
+			"AdditionalProperties": []map[string]interface{}{
+				{"FieldURI": "item:Subject"},
+				{"FieldURI": "item:DateTimeReceived"},
+				{"FieldURI": "item:DateTimeSent"},
+				{"FieldURI": "message:From"},
+				{"FieldURI": "message:ToRecipients"},
+				{"FieldURI": "item:HasAttachments"},
+				{"FieldURI": "item:Importance"},
+				{"FieldURI": "message:IsRead"},
+				{"FieldURI": "item:Preview"},
+			},
+		},
+		"Paging": map[string]interface{}{
+			"__type":             "IndexedPageView:#Exchange",
+			"BasePoint":          "Beginning",
+			"Offset":             0,
+			"MaxEntriesReturned": maxResults,
+		},
+		"ViewFilter":        "All",
+		"FocusedViewFilter": -1,
+		"SortOrder": []map[string]interface{}{
+			{
+				"Order": "Descending",
+				"Path": map[string]interface{}{
+					"__type":   "PropertyUri:#Exchange",
+					"FieldURI": "item:DateTimeReceived",
+				},
+			},
+		},
+	}
+
+	if folderID != "" {
+		body["ParentFolderIds"] = []map[string]interface{}{
+			{"__type": "FolderId:#Exchange", "Id": folderID},
+		}
+	} else {
+		body["ParentFolderIds"] = []map[string]interface{}{
+			{"__type": "DistinguishedFolderId:#Exchange", "Id": "inbox"},
+		}
+	}
+
+	if query != "" {
+		body["Restriction"] = map[string]interface{}{
+			"__type":                "Contains:#Exchange",
+			"ContainmentMode":       "Substring",
+			"ContainmentComparison": "IgnoreCase",
+			"Item": map[string]interface{}{
+				"__type":   "PropertyUri:#Exchange",
+				"FieldURI": "item:Subject",
+			},
+			"Constant": map[string]interface{}{
+				"__type": "ConstantValue:#Exchange",
+				"Value":  query,
+			},
+		}
+	}
+
+	return body
+}
+
 // SearchConversations searches for conversations.
 func SearchConversations(page *rod.Page, canary string, query string, folderID string, maxResults int) (*SearchResult, error) {
 	if maxResults <= 0 {
@@ -106,9 +130,9 @@ func SearchConversations(page *rod.Page, canary string, query string, folderID s
 			"BaseShape": "IdOnly",
 		},
 		"Paging": map[string]interface{}{
-			"__type":     "IndexedPageView:#Exchange",
-			"BasePoint":  "Beginning",
-			"Offset":     0,
+			"__type":             "IndexedPageView:#Exchange",
+			"BasePoint":          "Beginning",
+			"Offset":             0,
 			"MaxEntriesReturned": maxResults,
 		},
 		"ViewFilter": "All",
@@ -158,7 +182,7 @@ func SearchConversations(page *rod.Page, canary string, query string, folderID s
 func GetMessage(page *rod.Page, canary string, messageID string) (*Message, error) {
 	body := map[string]interface{}{
 		"ItemShape": map[string]interface{}{
-			"BaseShape": "Default",
+			"BaseShape":          "Default",
 			"IncludeMimeContent": false,
 			"AdditionalProperties": []map[string]interface{}{
 				{"FieldURI": "item:Body"},
@@ -207,7 +231,7 @@ func GetConversation(page *rod.Page, canary string, conversationID string, folde
 			},
 		},
 		"MaxItemsToReturn": 100,
-		"SortOrder": "DateOrderAscending",
+		"SortOrder":        "DateOrderAscending",
 	}
 
 	if folderID != "" {

@@ -3,6 +3,8 @@ package owa
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/go-rod/rod"
 )
@@ -17,10 +19,10 @@ type FetchRequest struct {
 
 // FetchResponse represents an OWA API response.
 type FetchResponse struct {
-	Status     int             `json:"status"`
-	StatusText string          `json:"statusText"`
+	Status     int               `json:"status"`
+	StatusText string            `json:"statusText"`
 	Headers    map[string]string `json:"headers"`
-	Body       json.RawMessage `json:"body"`
+	Body       json.RawMessage   `json:"body"`
 }
 
 // Fetch executes an HTTP request in the page context using OWA session cookies.
@@ -120,13 +122,13 @@ func FetchWithCanary(page *rod.Page, canary string, req FetchRequest) (*FetchRes
 
 // OWAActionRequest is the standard OWA action request format.
 type OWAActionRequest struct {
-	Header  OWARequestHeader `json:"Header"`
-	Body    interface{}      `json:"Body,omitempty"`
+	Header OWARequestHeader `json:"Header"`
+	Body   interface{}      `json:"Body,omitempty"`
 }
 
 // OWARequestHeader is the standard OWA request header.
 type OWARequestHeader struct {
-	RequestServerVersion string `json:"RequestServerVersion"`
+	RequestServerVersion string       `json:"RequestServerVersion"`
 	TimeZoneContext      *OWATimeZone `json:"TimeZoneContext,omitempty"`
 }
 
@@ -152,10 +154,45 @@ func OWAEndpoint(action string) string {
 	return fmt.Sprintf("%s?action=%s&app=Mail&n=0", OWAAPIBase, action)
 }
 
+// OWAEndpointForURL returns the OWA endpoint for the given page URL.
+func OWAEndpointForURL(pageURL string, action string) string {
+	base := OWAAPIBase
+	if pageURL != "" {
+		if u, err := url.Parse(pageURL); err == nil && u.Scheme != "" && u.Host != "" {
+			origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+			switch {
+			case strings.Contains(u.Host, "outlook.cloud.microsoft"):
+				base = origin + "/owa/service.svc"
+			case strings.Contains(u.Host, "outlook.office.com"):
+				base = origin + "/owa/0/service.svc"
+			case strings.Contains(u.Host, "outlook.office365.com"):
+				base = origin + "/owa/0/service.svc"
+			case strings.Contains(u.Host, "outlook.live.com"):
+				base = origin + "/owa/0/service.svc"
+			default:
+				base = origin + "/owa/service.svc"
+			}
+		}
+	}
+	return fmt.Sprintf("%s?action=%s&app=Mail&n=0", base, action)
+}
+
+// OWAEndpointForPage returns the OWA endpoint for the current page.
+func OWAEndpointForPage(page *rod.Page, action string) string {
+	if page == nil {
+		return OWAEndpoint(action)
+	}
+	info, err := page.Info()
+	if err != nil || info == nil {
+		return OWAEndpoint(action)
+	}
+	return OWAEndpointForURL(info.URL, action)
+}
+
 // CallOWAAction calls an OWA service action with proper formatting.
 func CallOWAAction(page *rod.Page, canary string, action string, body interface{}) (*FetchResponse, error) {
 	req := FetchRequest{
-		URL:    OWAEndpoint(action),
+		URL:    OWAEndpointForPage(page, action),
 		Method: "POST",
 		Headers: map[string]string{
 			"Accept":       "application/json",
@@ -166,4 +203,21 @@ func CallOWAAction(page *rod.Page, canary string, action string, body interface{
 	}
 
 	return FetchWithCanary(page, canary, req)
+}
+
+// CallOWAActionWithBearer calls an OWA service action with bearer auth.
+func CallOWAActionWithBearer(page *rod.Page, bearer string, action string, body interface{}) (*FetchResponse, error) {
+	req := FetchRequest{
+		URL:    OWAEndpointForPage(page, action),
+		Method: "POST",
+		Headers: map[string]string{
+			"Accept":        "application/json",
+			"Content-Type":  "application/json",
+			"Action":        action,
+			"Authorization": bearer,
+		},
+		Body: NewOWARequest(body),
+	}
+
+	return Fetch(page, req)
 }

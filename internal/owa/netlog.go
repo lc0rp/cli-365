@@ -3,6 +3,8 @@ package owa
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,17 +14,19 @@ import (
 
 // NetworkLogEntry captures a single network request lifecycle.
 type NetworkLogEntry struct {
-	RequestID         string `json:"request_id"`
-	URL               string `json:"url"`
-	Method            string `json:"method,omitempty"`
-	ResourceType      string `json:"resource_type,omitempty"`
-	Status            int    `json:"status,omitempty"`
-	StatusText        string `json:"status_text,omitempty"`
-	MimeType          string `json:"mime_type,omitempty"`
-	FromDiskCache     bool   `json:"from_disk_cache,omitempty"`
-	FromServiceWorker bool   `json:"from_service_worker,omitempty"`
-	Failed            bool   `json:"failed,omitempty"`
-	ErrorText         string `json:"error_text,omitempty"`
+	RequestID         string            `json:"request_id"`
+	URL               string            `json:"url"`
+	Method            string            `json:"method,omitempty"`
+	ResourceType      string            `json:"resource_type,omitempty"`
+	Status            int               `json:"status,omitempty"`
+	StatusText        string            `json:"status_text,omitempty"`
+	MimeType          string            `json:"mime_type,omitempty"`
+	FromDiskCache     bool              `json:"from_disk_cache,omitempty"`
+	FromServiceWorker bool              `json:"from_service_worker,omitempty"`
+	Failed            bool              `json:"failed,omitempty"`
+	ErrorText         string            `json:"error_text,omitempty"`
+	RequestHeaders    map[string]string `json:"request_headers,omitempty"`
+	ResponseHeaders   map[string]string `json:"response_headers,omitempty"`
 }
 
 // NetworkLog is a snapshot of logged network activity.
@@ -109,6 +113,9 @@ func (l *NetworkLogger) onRequest(e *proto.NetworkRequestWillBeSent) {
 		Method:       e.Request.Method,
 		ResourceType: string(e.Type),
 	}
+	if shouldCaptureHeaders(e.Request.URL) {
+		entry.RequestHeaders = headersToStringMap(e.Request.Headers)
+	}
 	l.index[e.RequestID] = len(l.entries)
 	l.entries = append(l.entries, entry)
 }
@@ -143,6 +150,9 @@ func (l *NetworkLogger) onResponse(e *proto.NetworkResponseReceived) {
 	entry.MimeType = e.Response.MIMEType
 	entry.FromDiskCache = e.Response.FromDiskCache
 	entry.FromServiceWorker = e.Response.FromServiceWorker
+	if shouldCaptureHeaders(e.Response.URL) {
+		entry.ResponseHeaders = headersToStringMap(e.Response.Headers)
+	}
 	if entry.URL == "" {
 		entry.URL = e.Response.URL
 	}
@@ -204,4 +214,20 @@ func (l *NetworkLogger) Snapshot() NetworkLog {
 		Dropped:   l.dropped,
 		Entries:   entries,
 	}
+}
+
+func shouldCaptureHeaders(rawURL string) bool {
+	lower := strings.ToLower(rawURL)
+	return strings.Contains(lower, "outlook.") || strings.Contains(lower, "/owa/")
+}
+
+func headersToStringMap(headers proto.NetworkHeaders) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for k, v := range headers {
+		out[k] = fmt.Sprintf("%v", v)
+	}
+	return out
 }

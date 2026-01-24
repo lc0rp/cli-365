@@ -149,6 +149,22 @@ func Connect(ctx context.Context) (*rod.Browser, error) {
 
 // EnsureBrowser ensures a browser is running, starting one if needed.
 func EnsureBrowser(ctx context.Context, cfg config.Config) (*rod.Browser, error) {
+	if cfg.Browser.CDPEndpoint != "" {
+		rt := &RuntimeInfo{
+			WSEndpoint: cfg.Browser.CDPEndpoint,
+			PID:        0,
+			Managed:    false,
+			StartedAt:  time.Now(),
+		}
+		_ = SaveRuntime(rt)
+
+		browser := rod.New().ControlURL(cfg.Browser.CDPEndpoint)
+		if err := browser.Connect(); err != nil {
+			return nil, err
+		}
+		return browser, nil
+	}
+
 	// Try to connect to existing browser
 	rt, err := LoadRuntime()
 	if err == nil && rt.WSEndpoint != "" {

@@ -8,3 +8,6 @@ outlook-browser-cli
 
 # OS
 .DS_Store
+
+# Debug output
+owa-*.json

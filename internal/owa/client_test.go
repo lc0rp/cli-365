@@ -145,6 +145,7 @@ func TestIsOWAURL(t *testing.T) {
 		{"https://outlook.office.com/mail/inbox", true},
 		{"https://outlook.office365.com/mail/", true},
 		{"https://outlook.live.com/mail/", true},
+		{"https://outlook.cloud.microsoft/mail/", true},
 		{"https://google.com", false},
 		{"https://mail.google.com", false},
 		{"", false},

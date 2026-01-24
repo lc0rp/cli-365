@@ -34,6 +34,8 @@ func TestIsOWAURLVariants(t *testing.T) {
 		{"https://outlook.office365.com/mail/inbox", true},
 		{"https://outlook.live.com/mail/", true},
 		{"https://outlook.live.com/mail/0/inbox", true},
+		{"https://outlook.cloud.microsoft/mail/", true},
+		{"https://outlook.cloud.microsoft/mail/inbox", true},
 
 		// Should not match
 		{"https://outlook.office.com/calendar/", false},
@@ -136,7 +138,7 @@ func TestIsLoggedInNilPage(t *testing.T) {
 func TestCanaryExtractionJSStructure(t *testing.T) {
 	// The JS code should look for specific cookie names
 	expectedCookieNames := []string{"X-OWA-CANARY", "OWA-CANARY", "XOWACANARY"}
-	
+
 	for _, name := range expectedCookieNames {
 		if name == "" {
 			t.Error("Cookie name should not be empty")
@@ -148,7 +150,7 @@ func TestBearerExtractionJSStructure(t *testing.T) {
 	// The JS should check localStorage for accesstoken keys
 	// targeting outlook.office.com or outlook.cloud.microsoft
 	targets := []string{"outlook.office.com", "outlook.cloud.microsoft"}
-	
+
 	for _, target := range targets {
 		if target == "" {
 			t.Error("Target should not be empty")

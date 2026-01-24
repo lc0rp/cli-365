@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -121,7 +122,17 @@ func debugCommand() *cli.Command {
 					var probe *probeFetchResult
 					if c.Bool("probe-fetch") {
 						probe = &probeFetchResult{}
-						result, err := owa.SearchMessages(page, tokens.Canary, "", "", 1)
+						var (
+							result *owa.SearchResult
+							err    error
+						)
+						if tokens.Canary != "" {
+							result, err = owa.SearchMessages(page, tokens.Canary, "", "", 1)
+						} else if tokens.Bearer != "" {
+							result, err = owa.SearchMessagesWithBearer(page, tokens.Bearer, "", "", 1)
+						} else {
+							err = fmt.Errorf("missing canary and bearer tokens")
+						}
 						if err != nil {
 							probe.OK = false
 							probe.Error = err.Error()
@@ -137,6 +148,12 @@ func debugCommand() *cli.Command {
 						stopNetlog = nil
 					}
 					netlog := logger.Snapshot()
+					if tokens.Canary == "" {
+						if canary := findCanaryInNetlog(netlog); canary != "" {
+							tokens.Canary = canary
+							_ = owa.SaveTokens(tokens)
+						}
+					}
 
 					payload := map[string]interface{}{
 						"templates": discovery,
@@ -193,4 +210,28 @@ func writeJSONFile(path string, payload interface{}) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+func findCanaryInNetlog(netlog owa.NetworkLog) string {
+	for _, entry := range netlog.Entries {
+		if val := headerValue(entry.RequestHeaders, "x-owa-canary"); val != "" {
+			return val
+		}
+		if val := headerValue(entry.ResponseHeaders, "x-owa-canary"); val != "" {
+			return val
+		}
+	}
+	return ""
+}
+
+func headerValue(headers map[string]string, key string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
 }

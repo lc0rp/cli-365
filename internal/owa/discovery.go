@@ -1,8 +1,10 @@
 package owa
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -25,13 +27,16 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 			return nil, fmt.Errorf("failed to extract canary: %w", err)
 		}
 	}
-
 	if canary == "" {
-		return nil, errors.New("canary token not found - are you logged in?")
+		canary, _ = getCanaryFromStartupData(page)
 	}
 
 	// Get bearer token from localStorage
 	bearer, _ := getBearerFromStorage(page)
+
+	if canary == "" && bearer == "" {
+		return nil, errors.New("canary token not found - are you logged in?")
+	}
 
 	// Get user email from page state
 	userEmail, _ := getUserEmailFromPage(page)
@@ -48,13 +53,30 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 
 // getCanaryFromCookies extracts the X-OWA-CANARY cookie value.
 func getCanaryFromCookies(page *rod.Page) (string, error) {
+	canaryNames := []string{"X-OWA-CANARY", "OWA-CANARY", "XOWACANARY"}
+
 	cookies, err := page.Cookies([]string{})
-	if err != nil {
-		return "", err
+	if err == nil {
+		for _, cookie := range cookies {
+			for _, name := range canaryNames {
+				if strings.EqualFold(cookie.Name, name) && cookie.Value != "" {
+					return cookie.Value, nil
+				}
+			}
+		}
 	}
 
-	canaryNames := []string{"X-OWA-CANARY", "OWA-CANARY", "XOWACANARY"}
-	for _, cookie := range cookies {
+	// Fallback: fetch all cookies via CDP (some domains may not match current URL).
+	_ = proto.NetworkEnable{}.Call(page)
+	all, err := proto.NetworkGetAllCookies{}.Call(page)
+	if err != nil {
+		if err != nil && len(cookies) == 0 {
+			return "", err
+		}
+		return "", nil
+	}
+
+	for _, cookie := range all.Cookies {
 		for _, name := range canaryNames {
 			if strings.EqualFold(cookie.Name, name) && cookie.Value != "" {
 				return cookie.Value, nil
@@ -63,6 +85,85 @@ func getCanaryFromCookies(page *rod.Page) (string, error) {
 	}
 
 	return "", nil
+}
+
+func getCanaryFromStartupData(page *rod.Page) (string, error) {
+	if page == nil {
+		return "", errors.New("page is nil")
+	}
+
+	info, err := page.Info()
+	if err != nil {
+		return "", err
+	}
+	if info == nil || info.URL == "" {
+		return "", errors.New("page url missing")
+	}
+
+	parsed, err := url.Parse(info.URL)
+	if err != nil {
+		return "", err
+	}
+	origin := fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
+	req := FetchRequest{
+		URL:    origin + "/owa/startupdata.ashx?app=Mail&n=0",
+		Method: "POST",
+	}
+
+	resp, err := Fetch(page, req)
+	if err != nil {
+		return "", err
+	}
+
+	for key, val := range resp.Headers {
+		if strings.EqualFold(key, "x-owa-canary") && val != "" {
+			return val, nil
+		}
+	}
+
+	var payload interface{}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		// If body is a string, check for a canary-like key.
+		var raw string
+		if err := json.Unmarshal(resp.Body, &raw); err == nil {
+			return extractCanaryFromString(raw), nil
+		}
+		return "", nil
+	}
+
+	return extractCanaryFromValue(payload), nil
+}
+
+func extractCanaryFromValue(v interface{}) string {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		for key, child := range val {
+			if strings.Contains(strings.ToLower(key), "canary") {
+				if s, ok := child.(string); ok && s != "" {
+					return s
+				}
+			}
+			if s := extractCanaryFromValue(child); s != "" {
+				return s
+			}
+		}
+	case []interface{}:
+		for _, child := range val {
+			if s := extractCanaryFromValue(child); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func extractCanaryFromString(raw string) string {
+	lower := strings.ToLower(raw)
+	idx := strings.Index(lower, "canary")
+	if idx < 0 {
+		return ""
+	}
+	return ""
 }
 
 // getCanaryFromPage extracts canary from document.cookie or global variables.
@@ -114,6 +215,25 @@ func getBearerFromStorage(page *rod.Page) (string, error) {
 		const tokens = [];
 		const matchesTarget = (key) =>
 			/https:\/\/outlook\.office\.com|https:\/\/outlook\.cloud\.microsoft/i.test(key);
+		const decodeJwt = (token) => {
+			try {
+				const parts = token.split(".");
+				if (parts.length < 2) return null;
+				const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+				const json = atob(b64);
+				return JSON.parse(json);
+			} catch {
+				return null;
+			}
+		};
+
+		const scoreToken = (aud) => {
+			if (!aud || typeof aud !== "string") return 0;
+			if (aud === "https://outlook.office.com") return 3;
+			if (aud.includes("https://outlook.office.com") && !aud.includes("/search")) return 2;
+			if (aud.includes("https://outlook.office.com")) return 1;
+			return 0;
+		};
 
 		// Check localStorage
 		for (const key of Object.keys(localStorage || {})) {
@@ -124,7 +244,11 @@ func getBearerFromStorage(page *rod.Page) (string, error) {
 			try {
 				const parsed = JSON.parse(raw);
 				if (parsed.secret && parsed.tokenType) {
-					tokens.push(parsed.tokenType + " " + parsed.secret);
+					const payload = decodeJwt(parsed.secret);
+					tokens.push({
+						token: parsed.tokenType + " " + parsed.secret,
+						aud: payload && payload.aud ? payload.aud : "",
+					});
 				}
 			} catch {}
 		}
@@ -137,12 +261,18 @@ func getBearerFromStorage(page *rod.Page) (string, error) {
 			try {
 				const parsed = JSON.parse(raw);
 				if (parsed.token && parsed.tokenType) {
-					tokens.push(parsed.tokenType + " " + parsed.token);
+					const payload = decodeJwt(parsed.token);
+					tokens.push({
+						token: parsed.tokenType + " " + parsed.token,
+						aud: payload && payload.aud ? payload.aud : "",
+					});
 				}
 			} catch {}
 		}
 
-		return tokens[0] || null;
+		if (!tokens.length) return null;
+		tokens.sort((a, b) => scoreToken(b.aud) - scoreToken(a.aud));
+		return tokens[0].token || null;
 	}`)
 	if err != nil {
 		return "", err
@@ -204,7 +334,7 @@ func NavigateToOWA(page *rod.Page) error {
 	if err := page.Navigate(OWABaseURL); err != nil {
 		return fmt.Errorf("failed to navigate: %w", err)
 	}
-	
+
 	// Wait for network to be idle
 	if err := page.WaitLoad(); err != nil {
 		return fmt.Errorf("failed to wait for load: %w", err)
@@ -216,7 +346,7 @@ func NavigateToOWA(page *rod.Page) error {
 // WaitForLogin waits for the user to complete login and OWA to load.
 func WaitForLogin(page *rod.Page, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		info, err := page.Info()
 		if err != nil {
@@ -257,8 +387,11 @@ func IsLoggedIn(page *rod.Page) bool {
 	if canary == "" {
 		canary, _ = getCanaryFromPage(page)
 	}
-
-	return canary != ""
+	if canary != "" {
+		return true
+	}
+	bearer, _ := getBearerFromStorage(page)
+	return bearer != ""
 }
 
 // EnsureLoggedIn checks if logged in and navigates to OWA if needed.
@@ -282,6 +415,30 @@ func EnsureLoggedIn(page *rod.Page) error {
 	}
 
 	return nil
+}
+
+// WaitForLoggedIn waits up to timeout for a valid OWA session.
+func WaitForLoggedIn(page *rod.Page, timeout time.Duration) error {
+	if page == nil {
+		return errors.New("page is nil")
+	}
+	if timeout <= 0 {
+		return errors.New("timeout must be positive")
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if IsLoggedIn(page) {
+			return nil
+		}
+		info, err := page.Info()
+		if err == nil && !isOWAURL(info.URL) {
+			_ = NavigateToOWA(page)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return errors.New("login timeout - not logged in")
 }
 
 // SetCanaryCookie ensures the canary is set as a request header cookie.
