@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 
 	"github.com/lc0rp/outlook-browser-cli/internal/config"
@@ -114,4 +115,61 @@ func SaveRuntime(rt *RuntimeInfo) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+// Connect connects to a running browser instance and returns a rod.Browser.
+func Connect(ctx context.Context) (*rod.Browser, error) {
+	rt, err := LoadRuntime()
+	if err != nil {
+		return nil, errors.New("no browser running - run 'browser start' first")
+	}
+
+	browser := rod.New().ControlURL(rt.WSEndpoint)
+	if err := browser.Connect(); err != nil {
+		return nil, err
+	}
+
+	return browser, nil
+}
+
+// EnsureBrowser ensures a browser is running, starting one if needed.
+func EnsureBrowser(ctx context.Context, cfg config.Config) (*rod.Browser, error) {
+	// Try to connect to existing browser
+	rt, err := LoadRuntime()
+	if err == nil && rt.WSEndpoint != "" {
+		browser := rod.New().ControlURL(rt.WSEndpoint)
+		if err := browser.Connect(); err == nil {
+			return browser, nil
+		}
+		// Clean up stale runtime file
+		_ = os.Remove(runtimePath())
+	}
+
+	// Start a new browser
+	_, err = Start(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return Connect(ctx)
+}
+
+// IsRunning checks if a browser is currently running.
+func IsRunning() bool {
+	rt, err := LoadRuntime()
+	if err != nil {
+		return false
+	}
+	if rt.PID > 0 {
+		proc, err := os.FindProcess(rt.PID)
+		if err != nil {
+			return false
+		}
+		// On Unix, FindProcess always succeeds, so we send signal 0 to check
+		if err := proc.Signal(nil); err != nil {
+			return false
+		}
+		return true
+	}
+	return rt.WSEndpoint != ""
 }
