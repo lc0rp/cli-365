@@ -12,7 +12,9 @@ import (
 
 	"github.com/lc0rp/cli-365/internal/browser"
 	"github.com/lc0rp/cli-365/internal/config"
+	"github.com/lc0rp/cli-365/internal/keyring"
 	"github.com/lc0rp/cli-365/internal/owa"
+	"github.com/lc0rp/cli-365/internal/security"
 )
 
 func main() {
@@ -30,7 +32,12 @@ func main() {
 				Aliases: []string{"j"},
 				Usage:   "Output in JSON format",
 			},
+			&cli.BoolFlag{
+				Name:  "readonly",
+				Usage: "Restrict to read-only operations (no send/draft/delete)",
+			},
 		},
+		Before: enforceSecurityPolicy,
 		Commands: []*cli.Command{
 			authCommand(),
 			browserCommand(),
@@ -45,9 +52,55 @@ func main() {
 	}
 }
 
+// enforceSecurityPolicy checks allowlist and readonly restrictions before command execution.
+func enforceSecurityPolicy(c *cli.Context) error {
+	// Skip check for help commands
+	if c.NArg() == 0 || c.Args().First() == "help" {
+		return nil
+	}
+
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return err
+	}
+
+	// Build command path from args
+	commandPath := buildCommandPath(c)
+
+	// Create policy from config and flags
+	policy := security.Policy{
+		Readonly:  cfg.Auth.Readonly || c.Bool("readonly"),
+		Allowlist: cfg.Security.Allowlist,
+	}
+
+	// Check security policy
+	return policy.Check(commandPath)
+}
+
+// buildCommandPath extracts the command path from CLI context.
+func buildCommandPath(c *cli.Context) string {
+	args := c.Args().Slice()
+	var parts []string
+
+	// Extract command parts (stop at first flag or end)
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			break
+		}
+		parts = append(parts, arg)
+	}
+
+	return strings.Join(parts, " ")
+}
+
 func loadConfig(c *cli.Context) (config.Config, error) {
 	path := c.String("config")
 	return config.Load(path)
+}
+
+// getTokenStorage returns the appropriate token storage based on config.
+func getTokenStorage(cfg config.Config) (*keyring.TokenStorage, error) {
+	return keyring.NewTokenStorage(cfg.Security.Keyring)
 }
 
 // getOWAClient gets a connected OWA client with valid tokens.

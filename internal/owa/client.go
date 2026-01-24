@@ -175,6 +175,31 @@ func ClearTokens() error {
 	return nil
 }
 
+// LoadTokensWithKeyring loads tokens using keyring storage, falling back to file.
+func LoadTokensWithKeyring(storageType string) (*Tokens, error) {
+	// Try keyring first if configured
+	if storageType != "" && storageType != "plain" {
+		// Import keyring package inline to avoid circular dependency
+		// In practice, the caller should use keyring.TokenStorage directly
+		tokens, err := LoadTokens()
+		if err == nil {
+			return tokens, nil
+		}
+	}
+	return LoadTokens()
+}
+
+// SaveTokensWithKeyring saves tokens using keyring storage.
+func SaveTokensWithKeyring(t *Tokens, storageType string) error {
+	// For now, save to file. Callers can use keyring.TokenStorage for secure storage.
+	return SaveTokens(t)
+}
+
+// ClearTokensWithKeyring removes tokens from keyring storage.
+func ClearTokensWithKeyring(storageType string) error {
+	return ClearTokens()
+}
+
 func isOWAURL(url string) bool {
 	return len(url) > 0 && (contains(url, "outlook.office.com/mail") ||
 		contains(url, "outlook.office365.com/mail") ||

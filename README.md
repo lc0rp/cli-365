@@ -36,11 +36,38 @@ browser:
 auth:
   tenant: "common"
   account_hint: ""   # Pre-fill email on login
-  readonly: false
+  readonly: false    # Global readonly mode
   scopes: ["mail.readwrite", "mail.send"]
 security:
-  allowlist: ["mail", "auth", "browser"]
-  keyring: "os"      # os | encrypted-file
+  allowlist: ["mail", "auth", "browser"]  # Commands allowed (empty = all)
+  keyring: "os"      # Token storage: os | encrypted-file | plain
+```
+
+### Security Features
+
+**Readonly Mode**: Restricts operations to read-only commands (search, view, list).
+```bash
+# Via flag
+cli-365 --readonly mail search "test"  # Allowed
+cli-365 --readonly mail send ...       # Blocked
+
+# Or set in config
+auth:
+  readonly: true
+```
+
+**Command Allowlist**: Restrict which commands can run (useful for sandboxed/agent environments).
+```yaml
+security:
+  allowlist: ["mail search", "mail view", "auth"]  # Only these commands work
+```
+
+**Keyring Storage**: Securely store tokens using OS keyring or encrypted file.
+```yaml
+security:
+  keyring: "os"             # macOS Keychain, Linux secret-tool
+  keyring: "encrypted-file" # AES-256-GCM encrypted file
+  keyring: "plain"          # Plain JSON file (not recommended)
 ```
 
 ## Usage
