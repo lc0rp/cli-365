@@ -84,10 +84,10 @@ func TestNetworkLogSnapshotCopy(t *testing.T) {
 	}
 
 	snapshot1 := logger.Snapshot()
-	
+
 	// Modify original logger
 	logger.entries = append(logger.entries, NetworkLogEntry{RequestID: "2"})
-	
+
 	snapshot2 := logger.Snapshot()
 
 	// Snapshot1 should not be affected
@@ -341,28 +341,16 @@ func TestNetworkLoggerFinish(t *testing.T) {
 }
 
 func TestStartNetworkLoggerNilPage(t *testing.T) {
-	_, _, err := StartNetworkLogger(nil, 100)
+	_, _, err := StartNetworkLogger(nil, NetworkLogOptions{MaxEntries: 100})
 	if err == nil {
 		t.Error("StartNetworkLogger(nil) should return error")
 	}
 }
 
 func TestStartNetworkLoggerDefaultMax(t *testing.T) {
-	// We can't test the full StartNetworkLogger without a real page,
-	// but we can verify the default max behavior through NetworkLogger
-	logger := &NetworkLogger{
-		startedAt: time.Now(),
-		max:       0,
-		index:     make(map[proto.NetworkRequestID]int),
-	}
-
-	// Simulate what StartNetworkLogger does with maxEntries <= 0
-	if logger.max <= 0 {
-		logger.max = 500
-	}
-
-	if logger.max != 500 {
-		t.Errorf("default max = %d, want 500", logger.max)
+	opts := normalizeNetworkLogOptions(NetworkLogOptions{})
+	if opts.MaxEntries != 500 {
+		t.Errorf("default max = %d, want 500", opts.MaxEntries)
 	}
 }
 

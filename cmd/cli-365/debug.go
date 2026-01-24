@@ -56,6 +56,16 @@ func debugCommand() *cli.Command {
 						Value: 500,
 					},
 					&cli.BoolFlag{
+						Name:  "netlog-bodies",
+						Usage: "Capture request/response bodies (redacted)",
+						Value: false,
+					},
+					&cli.IntFlag{
+						Name:  "netlog-body-max",
+						Usage: "Max bytes to keep per request/response body",
+						Value: 64 * 1024,
+					},
+					&cli.BoolFlag{
 						Name:  "probe-fetch",
 						Usage: "Run a minimal FindItem to validate fetch",
 						Value: true,
@@ -84,7 +94,11 @@ func debugCommand() *cli.Command {
 					}
 
 					page := client.Page()
-					logger, stopNetlog, err := owa.StartNetworkLogger(page, c.Int("netlog-max"))
+					logger, stopNetlog, err := owa.StartNetworkLogger(page, owa.NetworkLogOptions{
+						MaxEntries:    c.Int("netlog-max"),
+						CaptureBodies: c.Bool("netlog-bodies"),
+						MaxBodyBytes:  c.Int("netlog-body-max"),
+					})
 					if err != nil {
 						return err
 					}
@@ -149,7 +163,10 @@ func debugCommand() *cli.Command {
 					}
 					netlog := logger.Snapshot()
 					if tokens.Canary == "" {
-						if canary := findCanaryInNetlog(netlog); canary != "" {
+						if canary := logger.Canary(); canary != "" {
+							tokens.Canary = canary
+							_ = owa.SaveTokens(tokens)
+						} else if canary := findCanaryInNetlog(netlog); canary != "" {
 							tokens.Canary = canary
 							_ = owa.SaveTokens(tokens)
 						}
