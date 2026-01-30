@@ -28,11 +28,52 @@ type Client struct {
 
 // Tokens holds the extracted OWA authentication tokens.
 type Tokens struct {
-	Canary      string    `json:"canary"`
-	Bearer      string    `json:"bearer,omitempty"`
-	UserEmail   string    `json:"user_email,omitempty"`
-	ExtractedAt time.Time `json:"extracted_at"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	Canary      string            `json:"canary"`
+	Bearer      string            `json:"bearer,omitempty"`
+	UserEmail   string            `json:"user_email,omitempty"`
+	Session     SessionHeaders    `json:"session,omitempty"`
+	Folders     map[string]string `json:"folders,omitempty"`
+	ExtractedAt time.Time         `json:"extracted_at"`
+	ExpiresAt   time.Time         `json:"expires_at,omitempty"`
+}
+
+// MergeTokens merges non-empty fields from src into dst.
+func MergeTokens(dst, src *Tokens) *Tokens {
+	if dst == nil {
+		return src
+	}
+	if src == nil {
+		return dst
+	}
+	if src.Canary != "" {
+		dst.Canary = src.Canary
+	}
+	if src.Bearer != "" {
+		dst.Bearer = src.Bearer
+	}
+	if src.UserEmail != "" {
+		dst.UserEmail = src.UserEmail
+	}
+	if !src.Session.IsZero() {
+		dst.Session = MergeSessionHeaders(dst.Session, src.Session)
+	}
+	if !src.ExpiresAt.IsZero() {
+		dst.ExpiresAt = src.ExpiresAt
+	}
+	if !src.ExtractedAt.IsZero() {
+		dst.ExtractedAt = src.ExtractedAt
+	}
+	if len(src.Folders) > 0 {
+		if dst.Folders == nil {
+			dst.Folders = map[string]string{}
+		}
+		for k, v := range src.Folders {
+			if v != "" {
+				dst.Folders[k] = v
+			}
+		}
+	}
+	return dst
 }
 
 // NewClient creates a new OWA client from an existing browser connection.
@@ -145,6 +186,29 @@ func SaveTokens(t *Tokens) error {
 func LoadOrDiscoverTokens(page *rod.Page) (*Tokens, error) {
 	tokens, err := LoadTokens()
 	if err == nil && tokens != nil && tokens.Canary != "" {
+		if page != nil && tokens.Bearer == "" {
+			if bearer, err := getBearerFromStorage(page); err == nil && bearer != "" {
+				tokens.Bearer = bearer
+				_ = SaveTokens(tokens)
+			}
+		}
+		if page != nil && tokens.UserEmail == "" {
+			if email, err := getUserEmailFromPage(page); err == nil && email != "" {
+				tokens.UserEmail = email
+				_ = SaveTokens(tokens)
+			}
+		}
+		if page != nil && tokens.Session.IsZero() {
+			if session, err := getSessionHeadersFromPage(page); err == nil {
+				if session.AnchorMailbox == "" && tokens.UserEmail != "" {
+					session.AnchorMailbox = tokens.UserEmail
+				}
+				if !session.IsZero() {
+					tokens.Session = MergeSessionHeaders(tokens.Session, session)
+					_ = SaveTokens(tokens)
+				}
+			}
+		}
 		return tokens, nil
 	}
 
@@ -200,11 +264,18 @@ func ClearTokensWithKeyring(storageType string) error {
 	return ClearTokens()
 }
 
+func isOutlookHostURL(url string) bool {
+	return len(url) > 0 && (contains(url, "outlook.office.com") ||
+		contains(url, "outlook.office365.com") ||
+		contains(url, "outlook.live.com") ||
+		contains(url, "outlook.cloud.microsoft"))
+}
+
 func isOWAURL(url string) bool {
-	return len(url) > 0 && (contains(url, "outlook.office.com/mail") ||
-		contains(url, "outlook.office365.com/mail") ||
-		contains(url, "outlook.live.com/mail") ||
-		contains(url, "outlook.cloud.microsoft/mail"))
+	if !isOutlookHostURL(url) {
+		return false
+	}
+	return contains(url, "/mail") || contains(url, "/owa/") || contains(url, "/calendar")
 }
 
 func contains(s, substr string) bool {

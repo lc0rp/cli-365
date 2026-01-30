@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	ProfileDir string        `yaml:"profile_dir"`
-	Browser    BrowserConfig `yaml:"browser"`
-	Auth       AuthConfig    `yaml:"auth"`
+	ProfileDir string         `yaml:"profile_dir"`
+	Browser    BrowserConfig  `yaml:"browser"`
+	Auth       AuthConfig     `yaml:"auth"`
 	Security   SecurityConfig `yaml:"security"`
 }
 
@@ -20,6 +20,7 @@ type BrowserConfig struct {
 	Headless    bool   `yaml:"headless"`
 	NoSandbox   bool   `yaml:"no_sandbox"`
 	CDPEndpoint string `yaml:"cdp_endpoint"`
+	CDPPort     int    `yaml:"cdp_port"`
 }
 
 type AuthConfig struct {
@@ -41,6 +42,7 @@ func Default() Config {
 			Headless:    true,
 			NoSandbox:   false,
 			CDPEndpoint: "",
+			CDPPort:     0,
 		},
 		Auth: AuthConfig{
 			Tenant:      "common",

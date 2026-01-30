@@ -97,10 +97,11 @@ func TestIsOWAURLExtended(t *testing.T) {
 		{"https://outlook.office.com/mail/inbox", true},
 		{"https://outlook.office.com/mail/drafts", true},
 		{"https://outlook.office.com/mail/sentitems", true},
+		{"https://outlook.office.com/owa/", true},
+		{"https://outlook.office.com/calendar/", true},
 		// Case variations (URL matching is case-sensitive in impl)
 		{"https://OUTLOOK.OFFICE.COM/mail/", false}, // Case matters
 		// Near misses
-		{"https://outlook.office.com/calendar/", false},
 		{"https://outlook.office.com/people/", false},
 		{"https://outlook.office.com/", false},
 		// Various protocols

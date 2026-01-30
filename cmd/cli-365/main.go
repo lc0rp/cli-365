@@ -5,15 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/urfave/cli/v2"
 
 	"github.com/lc0rp/cli-365/internal/browser"
 	"github.com/lc0rp/cli-365/internal/config"
 	"github.com/lc0rp/cli-365/internal/keyring"
 	"github.com/lc0rp/cli-365/internal/owa"
+	"github.com/lc0rp/cli-365/internal/paths"
 	"github.com/lc0rp/cli-365/internal/security"
 )
 
@@ -35,6 +39,19 @@ func main() {
 			&cli.BoolFlag{
 				Name:  "readonly",
 				Usage: "Restrict to read-only operations (no send/draft/delete)",
+			},
+			&cli.BoolFlag{
+				Name:  "ensure-cdp",
+				Usage: "Start managed browser if CDP is unavailable and wait for login",
+			},
+			&cli.DurationFlag{
+				Name:  "ensure-cdp-timeout",
+				Usage: "How long to wait for CDP/login when --ensure-cdp is set",
+				Value: 5 * time.Minute,
+			},
+			&cli.IntFlag{
+				Name:  "cdp-port",
+				Usage: "Override browser.cdp_port for this run",
 			},
 		},
 		Before: enforceSecurityPolicy,
@@ -93,9 +110,186 @@ func buildCommandPath(c *cli.Context) string {
 	return strings.Join(parts, " ")
 }
 
+func parseSearchProvider(raw string) (owa.SearchProvider, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "auto":
+		return owa.SearchProviderAuto, nil
+	case "owa":
+		return owa.SearchProviderOWA, nil
+	case "searchservice":
+		return owa.SearchProviderSearchService, nil
+	default:
+		return "", fmt.Errorf("invalid provider %q (expected auto, owa, searchservice)", raw)
+	}
+}
+
+func buildSearchQuery(base string, from string, to string, cc string, bcc string, subject string, hasAttachments bool, unread bool, isRead bool, since string, before string) (string, error) {
+	parts := make([]string, 0, 10)
+	if base = strings.TrimSpace(base); base != "" {
+		parts = append(parts, base)
+	}
+	if from = strings.TrimSpace(from); from != "" {
+		parts = append(parts, fmt.Sprintf("from:\"%s\"", escapeQueryValue(from)))
+	}
+	if to = strings.TrimSpace(to); to != "" {
+		parts = append(parts, fmt.Sprintf("to:\"%s\"", escapeQueryValue(to)))
+	}
+	if cc = strings.TrimSpace(cc); cc != "" {
+		parts = append(parts, fmt.Sprintf("cc:\"%s\"", escapeQueryValue(cc)))
+	}
+	if bcc = strings.TrimSpace(bcc); bcc != "" {
+		parts = append(parts, fmt.Sprintf("bcc:\"%s\"", escapeQueryValue(bcc)))
+	}
+	if subject = strings.TrimSpace(subject); subject != "" {
+		parts = append(parts, fmt.Sprintf("subject:\"%s\"", escapeQueryValue(subject)))
+	}
+	if hasAttachments {
+		parts = append(parts, "hasattachment:true")
+	}
+	if unread && isRead {
+		return "", fmt.Errorf("cannot set both --unread and --is-read")
+	}
+	if unread {
+		parts = append(parts, "isread:false")
+	}
+	if isRead {
+		parts = append(parts, "isread:true")
+	}
+	if since = strings.TrimSpace(since); since != "" {
+		date, err := normalizeDateTime(since)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("received>=%s", date))
+	}
+	if before = strings.TrimSpace(before); before != "" {
+		date, err := normalizeDateTime(before)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("received<=%s", date))
+	}
+	return strings.Join(parts, " "), nil
+}
+
+func escapeQueryValue(value string) string {
+	return strings.ReplaceAll(value, `"`, `\"`)
+}
+
+func normalizeDateTime(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		return t.Format("2006-01-02"), nil
+	}
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		if strings.Contains(raw, ".") {
+			return t.Format(time.RFC3339Nano), nil
+		}
+		return t.Format(time.RFC3339), nil
+	}
+	return "", fmt.Errorf("invalid date %q (use YYYY-MM-DD or RFC3339)", raw)
+}
+
 func loadConfig(c *cli.Context) (config.Config, error) {
 	path := c.String("config")
 	return config.Load(path)
+}
+
+func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod.Browser, error) {
+	if c.IsSet("cdp-port") {
+		cfg.Browser.CDPPort = c.Int("cdp-port")
+		cfg.Browser.CDPEndpoint = ""
+	}
+	if !c.Bool("ensure-cdp") {
+		return browser.EnsureBrowser(ctx, cfg)
+	}
+
+	if cfg.Browser.CDPPort > 0 {
+		if endpoint, err := browser.ResolveWSEndpoint(cfg.Browser.CDPPort); err == nil {
+			if b, err := browser.ConnectEndpoint(endpoint); err == nil {
+				_ = browser.SaveRuntime(&browser.RuntimeInfo{
+					WSEndpoint: endpoint,
+					PID:        0,
+					Managed:    false,
+					StartedAt:  time.Now(),
+				})
+				if err := ensureLoggedIn(c, b); err != nil {
+					return nil, err
+				}
+				return b, nil
+			}
+		}
+		fmt.Printf("[ensure-cdp] CDP unavailable on port %d; starting managed browser...\n", cfg.Browser.CDPPort)
+		cfgNoCDP := cfg
+		cfgNoCDP.Browser.CDPEndpoint = ""
+		b, err := browser.EnsureBrowser(ctx, cfgNoCDP)
+		if err != nil {
+			return nil, err
+		}
+		if err := ensureLoggedIn(c, b); err != nil {
+			return nil, err
+		}
+		return b, nil
+	}
+
+	if cfg.Browser.CDPEndpoint != "" {
+		b, err := browser.ConnectEndpoint(cfg.Browser.CDPEndpoint)
+		if err == nil {
+			_ = browser.SaveRuntime(&browser.RuntimeInfo{
+				WSEndpoint: cfg.Browser.CDPEndpoint,
+				PID:        0,
+				Managed:    false,
+				StartedAt:  time.Now(),
+			})
+			if err := ensureLoggedIn(c, b); err != nil {
+				return nil, err
+			}
+			return b, nil
+		}
+		fmt.Printf("[ensure-cdp] CDP unavailable at %s; starting managed browser...\n", cfg.Browser.CDPEndpoint)
+	}
+
+	cfgNoCDP := cfg
+	cfgNoCDP.Browser.CDPEndpoint = ""
+	b, err := browser.EnsureBrowser(ctx, cfgNoCDP)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureLoggedIn(c, b); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func ensureLoggedIn(c *cli.Context, b *rod.Browser) error {
+	client := owa.NewClient(b)
+	if err := client.Connect(); err != nil {
+		return err
+	}
+	page := client.Page()
+	if owa.IsLoggedIn(page) {
+		return nil
+	}
+	if info, err := page.Info(); err == nil {
+		if info.URL == "" || info.URL == "about:blank" {
+			if err := owa.NavigateToOWA(page); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := owa.NavigateToOWA(page); err != nil {
+			return err
+		}
+	}
+	fmt.Println("[ensure-cdp] Please complete login in the browser window...")
+	timeout := c.Duration("ensure-cdp-timeout")
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	return owa.WaitForLoggedIn(page, timeout)
 }
 
 // getTokenStorage returns the appropriate token storage based on config.
@@ -111,7 +305,7 @@ func getOWAClient(c *cli.Context) (*owa.Client, error) {
 		return nil, err
 	}
 
-	b, err := browser.EnsureBrowser(ctx, cfg)
+	b, err := ensureBrowser(ctx, c, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +320,7 @@ func getOWAClient(c *cli.Context) (*owa.Client, error) {
 		return nil, err
 	}
 	client.SetTokens(tokens)
+	owa.SetSessionHeaders(tokens.Session)
 
 	return client, nil
 }
@@ -160,7 +355,7 @@ func authCommand() *cli.Command {
 					}
 
 					// Ensure browser is running
-					b, err := browser.EnsureBrowser(ctx, cfg)
+					b, err := ensureBrowser(ctx, c, cfg)
 					if err != nil {
 						return fmt.Errorf("failed to start browser: %w", err)
 					}
@@ -260,10 +455,21 @@ func browserCommand() *cli.Command {
 			{
 				Name:  "start",
 				Usage: "Start or attach to a managed browser",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:    "cdp-port",
+						Aliases: []string{"p"},
+						Usage:   "Fixed CDP port for the managed browser",
+					},
+				},
 				Action: func(c *cli.Context) error {
 					cfg, err := loadConfig(c)
 					if err != nil {
 						return err
+					}
+					if c.IsSet("cdp-port") {
+						cfg.Browser.CDPPort = c.Int("cdp-port")
+						cfg.Browser.CDPEndpoint = ""
 					}
 					ctx := context.Background()
 					rt, err := browser.Start(ctx, cfg)
@@ -344,6 +550,59 @@ func mailCommand() *cli.Command {
 						Name:  "folder",
 						Usage: "Folder ID to search in (default: inbox)",
 					},
+					&cli.StringFlag{
+						Name:  "provider",
+						Usage: "Search backend: auto | owa | searchservice",
+						Value: "auto",
+					},
+					&cli.StringFlag{
+						Name:  "from",
+						Usage: "Filter by sender (query syntax)",
+					},
+					&cli.StringFlag{
+						Name:  "to",
+						Usage: "Filter by recipient (query syntax)",
+					},
+					&cli.StringFlag{
+						Name:  "subject",
+						Usage: "Filter by subject (query syntax)",
+					},
+					&cli.StringFlag{
+						Name:  "cc",
+						Usage: "Filter by CC recipient (query syntax)",
+					},
+					&cli.StringFlag{
+						Name:  "bcc",
+						Usage: "Filter by BCC recipient (query syntax)",
+					},
+					&cli.BoolFlag{
+						Name:  "has-attachments",
+						Usage: "Filter to messages with attachments",
+					},
+					&cli.BoolFlag{
+						Name:  "unread",
+						Usage: "Filter to unread messages",
+					},
+					&cli.BoolFlag{
+						Name:  "is-read",
+						Usage: "Filter to read messages",
+					},
+					&cli.StringFlag{
+						Name:  "query",
+						Usage: "Raw query string (disables auto-escaping/assembly)",
+					},
+					&cli.StringFlag{
+						Name:  "since",
+						Usage: "Filter received since date/time (YYYY-MM-DD or RFC3339)",
+					},
+					&cli.StringFlag{
+						Name:  "after",
+						Usage: "Alias for --since (date/time)",
+					},
+					&cli.StringFlag{
+						Name:  "before",
+						Usage: "Filter received before date/time (YYYY-MM-DD or RFC3339)",
+					},
 				},
 				Action: func(c *cli.Context) error {
 					client, err := getOWAClient(c)
@@ -351,25 +610,69 @@ func mailCommand() *cli.Command {
 						return err
 					}
 
-					query := c.Args().First()
+					rawQuery := strings.TrimSpace(c.String("query"))
+					if rawQuery == "" {
+						rawQuery = c.Args().First()
+					}
+					query := rawQuery
+					since := c.String("since")
+					after := c.String("after")
+					if after != "" {
+						if since != "" && since != after {
+							return fmt.Errorf("--since and --after must match if both are set")
+						}
+						since = after
+					}
+					if c.String("query") == "" {
+						query, err = buildSearchQuery(
+							rawQuery,
+							c.String("from"),
+							c.String("to"),
+							c.String("cc"),
+							c.String("bcc"),
+							c.String("subject"),
+							c.Bool("has-attachments"),
+							c.Bool("unread"),
+							c.Bool("is-read"),
+							since,
+							c.String("before"),
+						)
+						if err != nil {
+							return err
+						}
+					}
 					limit := c.Int("limit")
 					folder := c.String("folder")
-
-					result, err := owa.SearchMessages(client.Page(), client.Tokens().Canary, query, folder, limit)
+					provider, err := parseSearchProvider(c.String("provider"))
 					if err != nil {
 						return err
+					}
+
+					result, err := owa.SearchMessagesWithProvider(client.Page(), client.Tokens(), query, folder, limit, provider)
+					if err != nil {
+						if strings.Contains(err.Error(), "ErrorInternalServerError") {
+							if convResult, convErr := owa.SearchConversations(client.Page(), client.Tokens(), query, folder, limit); convErr == nil {
+								result = convResult
+								err = nil
+							}
+						}
+						if err != nil {
+							return err
+						}
 					}
 
 					if c.Bool("json") {
 						return outputJSON(result)
 					}
 
-					if len(result.Messages) == 0 {
+					if len(result.Messages) == 0 && len(result.Conversations) == 0 {
 						fmt.Println("No messages found")
 						return nil
 					}
 
-					for _, msg := range result.Messages {
+					_ = saveLastSearch(query, result)
+
+					for i, msg := range result.Messages {
 						from := ""
 						if msg.From != nil {
 							from = msg.From.Address
@@ -377,11 +680,20 @@ func mailCommand() *cli.Command {
 								from = msg.From.Name
 							}
 						}
-						read := " "
-						if !msg.IsRead {
-							read = "*"
+						subject := msg.Subject
+						if subject == "" {
+							subject = "(no subject)"
 						}
-						fmt.Printf("%s [%s] %s - %s\n", read, msg.ID[:8], from, msg.Subject)
+						fmt.Printf("%d %s %s - %s\n", i+1, msg.ID, from, subject)
+					}
+					if len(result.Messages) == 0 && len(result.Conversations) > 0 {
+						for _, conv := range result.Conversations {
+							topic := conv.Topic
+							if topic == "" {
+								topic = "(no subject)"
+							}
+							fmt.Printf("  [%s] %s (%d messages)\n", conv.ID[:8], topic, conv.MessageCount)
+						}
 					}
 					return nil
 				},
@@ -390,18 +702,37 @@ func mailCommand() *cli.Command {
 				Name:      "view",
 				Usage:     "View a single message",
 				ArgsUsage: "<message-id>",
+				Flags: []cli.Flag{
+					&cli.IntFlag{Name: "index", Aliases: []string{"i"}, Usage: "View cached search result index"},
+				},
 				Action: func(c *cli.Context) error {
-					if c.NArg() < 1 {
-						return cli.Exit("message ID required", 1)
-					}
-
 					client, err := getOWAClient(c)
 					if err != nil {
 						return err
 					}
 
-					messageID := c.Args().First()
-					msg, err := owa.GetMessage(client.Page(), client.Tokens().Canary, messageID)
+					args := c.Args().Slice()
+					messageID := ""
+					index := c.Int("index")
+					if index == 0 && len(args) > 0 && strings.HasPrefix(args[0], "#") {
+						if parsed, err := parseIndexArg(args[0]); err == nil {
+							index = parsed
+							args = args[1:]
+						}
+					}
+					if index > 0 {
+						resolved, err := resolveCachedMessageID(index)
+						if err != nil {
+							return err
+						}
+						messageID = resolved
+					} else if len(args) > 0 {
+						messageID = args[0]
+					}
+					if strings.TrimSpace(messageID) == "" {
+						return cli.Exit("message ID required", 1)
+					}
+					msg, err := owa.GetMessage(client.Page(), client.Tokens(), messageID)
 					if err != nil {
 						return err
 					}
@@ -470,7 +801,7 @@ func mailCommand() *cli.Command {
 							}
 
 							convID := c.Args().First()
-							conv, err := owa.GetConversation(client.Page(), client.Tokens().Canary, convID, "")
+							conv, err := owa.GetConversation(client.Page(), client.Tokens(), convID, "")
 							if err != nil {
 								return err
 							}
@@ -545,7 +876,7 @@ func mailCommand() *cli.Command {
 								}
 							}
 
-							msg, err := owa.CreateDraft(client.Page(), client.Tokens().Canary, draft)
+							msg, err := owa.CreateDraft(client.Page(), client.Tokens(), draft)
 							if err != nil {
 								return err
 							}
@@ -594,7 +925,7 @@ func mailCommand() *cli.Command {
 								}
 							}
 
-							msg, err := owa.UpdateDraft(client.Page(), client.Tokens().Canary, draftID, draft)
+							msg, err := owa.UpdateDraft(client.Page(), client.Tokens(), draftID, draft)
 							if err != nil {
 								return err
 							}
@@ -622,7 +953,7 @@ func mailCommand() *cli.Command {
 							}
 
 							draftID := c.Args().First()
-							if err := owa.DeleteDraft(client.Page(), client.Tokens().Canary, draftID); err != nil {
+							if err := owa.DeleteDraft(client.Page(), client.Tokens(), draftID); err != nil {
 								return err
 							}
 
@@ -645,7 +976,7 @@ func mailCommand() *cli.Command {
 							}
 
 							draftID := c.Args().First()
-							if err := owa.SendDraft(client.Page(), client.Tokens().Canary, draftID); err != nil {
+							if err := owa.SendDraft(client.Page(), client.Tokens(), draftID); err != nil {
 								return err
 							}
 
@@ -693,11 +1024,94 @@ func mailCommand() *cli.Command {
 						}
 					}
 
-					if err := owa.SendMessage(client.Page(), client.Tokens().Canary, draft); err != nil {
+					if err := owa.SendMessage(client.Page(), client.Tokens(), draft); err != nil {
 						return err
 					}
 
 					fmt.Println("Message sent")
+					return nil
+				},
+			},
+			{
+				Name:      "reply",
+				Usage:     "Reply to a message",
+				ArgsUsage: "<message-id>",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "all", Usage: "Reply all recipients"},
+					&cli.IntFlag{Name: "index", Aliases: []string{"i"}, Usage: "Reply to cached search result index"},
+					&cli.StringFlag{Name: "body", Aliases: []string{"b"}, Usage: "Reply body"},
+					&cli.StringFlag{Name: "body-type", Value: "Text", Usage: "Body type (Text or HTML)"},
+				},
+				Action: func(c *cli.Context) error {
+					client, err := getOWAClient(c)
+					if err != nil {
+						return err
+					}
+
+					args := c.Args().Slice()
+					messageID := ""
+					index := c.Int("index")
+					if index == 0 && len(args) > 0 && strings.HasPrefix(args[0], "#") {
+						if parsed, err := parseIndexArg(args[0]); err == nil {
+							index = parsed
+							args = args[1:]
+						}
+					}
+					if index > 0 {
+						resolved, err := resolveCachedMessageID(index)
+						if err != nil {
+							return err
+						}
+						messageID = resolved
+					} else if len(args) > 0 {
+						messageID = args[0]
+					}
+					if strings.TrimSpace(messageID) == "" {
+						return cli.Exit("message ID required", 1)
+					}
+					replyAll := c.Bool("all")
+					bodyType := c.String("body-type")
+					bodyValue := c.String("body")
+					if !c.IsSet("all") || !c.IsSet("body") || !c.IsSet("body-type") {
+						for i := 1; i < len(args); i++ {
+							switch args[i] {
+							case "--all":
+								replyAll = true
+							case "--body", "-b":
+								if bodyValue == "" && i+1 < len(args) {
+									bodyValue = args[i+1]
+									i++
+								}
+							case "--body-type":
+								if bodyType == "" && i+1 < len(args) {
+									bodyType = args[i+1]
+									i++
+								}
+							default:
+								if bodyValue == "" && !strings.HasPrefix(args[i], "-") {
+									bodyValue = args[i]
+								}
+							}
+						}
+					}
+
+					if strings.TrimSpace(bodyValue) == "" {
+						return cli.Exit("reply body required (use --body or provide as second argument)", 1)
+					}
+					body := &owa.MessageBody{
+						BodyType: bodyType,
+						Value:    bodyValue,
+					}
+
+					if err := owa.ReplyToMessage(client.Page(), client.Tokens(), messageID, body, replyAll); err != nil {
+						return err
+					}
+
+					if c.Bool("json") {
+						return outputJSON(map[string]string{"status": "sent"})
+					}
+
+					fmt.Println("Reply sent")
 					return nil
 				},
 			},
@@ -720,7 +1134,7 @@ func mailCommand() *cli.Command {
 							}
 
 							messageID := c.Args().First()
-							attachments, err := owa.ListAttachments(client.Page(), client.Tokens().Canary, messageID)
+							attachments, err := owa.ListAttachments(client.Page(), client.Tokens(), messageID)
 							if err != nil {
 								return err
 							}
@@ -755,7 +1169,7 @@ func mailCommand() *cli.Command {
 							}
 
 							attachmentID := c.Args().Get(0)
-							content, name, err := owa.GetAttachment(client.Page(), client.Tokens().Canary, attachmentID)
+							content, name, err := owa.GetAttachment(client.Page(), client.Tokens(), attachmentID)
 							if err != nil {
 								return err
 							}
@@ -777,4 +1191,93 @@ func mailCommand() *cli.Command {
 			},
 		},
 	}
+}
+
+type cachedSearch struct {
+	Query    string          `json:"query"`
+	SavedAt  time.Time       `json:"saved_at"`
+	Messages []cachedMessage `json:"messages"`
+}
+
+type cachedMessage struct {
+	ID      string `json:"id"`
+	From    string `json:"from,omitempty"`
+	Subject string `json:"subject,omitempty"`
+}
+
+func saveLastSearch(query string, result *owa.SearchResult) error {
+	if result == nil {
+		return nil
+	}
+	cache := cachedSearch{
+		Query:   query,
+		SavedAt: time.Now(),
+	}
+	for _, msg := range result.Messages {
+		if msg.ID == "" {
+			continue
+		}
+		from := ""
+		if msg.From != nil {
+			from = msg.From.Address
+			if msg.From.Name != "" {
+				from = msg.From.Name
+			}
+		}
+		cache.Messages = append(cache.Messages, cachedMessage{
+			ID:      msg.ID,
+			From:    from,
+			Subject: msg.Subject,
+		})
+	}
+	path := lastSearchPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func resolveCachedMessageID(index int) (string, error) {
+	if index <= 0 {
+		return "", fmt.Errorf("index must be >= 1")
+	}
+	path := lastSearchPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("load cached search: %w", err)
+	}
+	var cache cachedSearch
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return "", fmt.Errorf("parse cached search: %w", err)
+	}
+	if len(cache.Messages) == 0 {
+		return "", fmt.Errorf("cached search has no messages")
+	}
+	if index > len(cache.Messages) {
+		return "", fmt.Errorf("index out of range: %d (max %d)", index, len(cache.Messages))
+	}
+	return cache.Messages[index-1].ID, nil
+}
+
+func parseIndexArg(raw string) (int, error) {
+	if !strings.HasPrefix(raw, "#") {
+		return 0, fmt.Errorf("index must start with #")
+	}
+	value := strings.TrimPrefix(raw, "#")
+	if value == "" {
+		return 0, fmt.Errorf("index missing")
+	}
+	index, err := strconv.Atoi(value)
+	if err != nil || index <= 0 {
+		return 0, fmt.Errorf("invalid index: %s", raw)
+	}
+	return index, nil
+}
+
+func lastSearchPath() string {
+	return filepath.Join(paths.StateDir(), "cli-365", "last_search.json")
 }

@@ -124,6 +124,54 @@ func TestClearTokens(t *testing.T) {
 	}
 }
 
+func TestMergeTokens(t *testing.T) {
+	dst := &Tokens{
+		Canary:    "old-canary",
+		UserEmail: "old@example.com",
+		Session: SessionHeaders{
+			SessionID:     "old-session",
+			AnchorMailbox: "old@example.com",
+		},
+		Folders: map[string]string{"inbox": "old-inbox"},
+	}
+	src := &Tokens{
+		Canary:    "new-canary",
+		Bearer:    "Bearer new",
+		UserEmail: "new@example.com",
+		Session: SessionHeaders{
+			SessionID: "new-session",
+			TenantID:  "tenant-1",
+		},
+		Folders: map[string]string{"inbox": "new-inbox", "sentitems": "sent-1"},
+	}
+
+	merged := MergeTokens(dst, src)
+	if merged.Canary != "new-canary" {
+		t.Fatalf("Canary = %q, want new-canary", merged.Canary)
+	}
+	if merged.Bearer != "Bearer new" {
+		t.Fatalf("Bearer = %q, want Bearer new", merged.Bearer)
+	}
+	if merged.UserEmail != "new@example.com" {
+		t.Fatalf("UserEmail = %q, want new@example.com", merged.UserEmail)
+	}
+	if merged.Session.SessionID != "new-session" {
+		t.Fatalf("SessionID = %q, want new-session", merged.Session.SessionID)
+	}
+	if merged.Session.AnchorMailbox != "old@example.com" {
+		t.Fatalf("AnchorMailbox = %q, want old@example.com", merged.Session.AnchorMailbox)
+	}
+	if merged.Session.TenantID != "tenant-1" {
+		t.Fatalf("TenantID = %q, want tenant-1", merged.Session.TenantID)
+	}
+	if merged.Folders["inbox"] != "new-inbox" {
+		t.Fatalf("Folders[inbox] = %q, want new-inbox", merged.Folders["inbox"])
+	}
+	if merged.Folders["sentitems"] != "sent-1" {
+		t.Fatalf("Folders[sentitems] = %q, want sent-1", merged.Folders["sentitems"])
+	}
+}
+
 func TestClearTokensNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -143,6 +191,8 @@ func TestIsOWAURL(t *testing.T) {
 		want bool
 	}{
 		{"https://outlook.office.com/mail/inbox", true},
+		{"https://outlook.office.com/owa/", true},
+		{"https://outlook.office.com/calendar/", true},
 		{"https://outlook.office365.com/mail/", true},
 		{"https://outlook.live.com/mail/", true},
 		{"https://outlook.cloud.microsoft/mail/", true},

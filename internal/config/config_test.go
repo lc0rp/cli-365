@@ -47,6 +47,7 @@ func TestLoadAndSave(t *testing.T) {
 	cfg.Auth.Tenant = "test-tenant"
 	cfg.Browser.Headless = false
 	cfg.Browser.NoSandbox = true
+	cfg.Browser.CDPPort = 9222
 
 	// Save
 	if err := Save(path, cfg); err != nil {
@@ -67,6 +68,9 @@ func TestLoadAndSave(t *testing.T) {
 	}
 	if loaded.Browser.NoSandbox != cfg.Browser.NoSandbox {
 		t.Errorf("Browser.NoSandbox = %v, want %v", loaded.Browser.NoSandbox, cfg.Browser.NoSandbox)
+	}
+	if loaded.Browser.CDPPort != cfg.Browser.CDPPort {
+		t.Errorf("Browser.CDPPort = %v, want %v", loaded.Browser.CDPPort, cfg.Browser.CDPPort)
 	}
 }
 
@@ -122,6 +126,7 @@ func TestBrowserConfig(t *testing.T) {
 		Headless:    true,
 		NoSandbox:   true,
 		CDPEndpoint: "ws://localhost:9222",
+		CDPPort:     9222,
 	}
 
 	if !cfg.Headless {
@@ -132,6 +137,9 @@ func TestBrowserConfig(t *testing.T) {
 	}
 	if cfg.CDPEndpoint == "" {
 		t.Error("CDPEndpoint should not be empty")
+	}
+	if cfg.CDPPort == 0 {
+		t.Error("CDPPort should not be zero")
 	}
 }
 

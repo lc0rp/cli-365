@@ -41,6 +41,14 @@ func redactHeaders(headers map[string]string, hash bool) map[string]string {
 	}
 	out := make(map[string]string, len(headers))
 	for k, v := range headers {
+		if strings.EqualFold(k, "x-owa-urlpostdata") && v != "" {
+			decoded, err := url.QueryUnescape(v)
+			if err == nil {
+				redacted := redactBody(decoded, "application/json", hash)
+				out[k] = url.QueryEscape(redacted)
+				continue
+			}
+		}
 		if isSensitiveHeader(k) {
 			out[k] = redactToken("header", v, hash)
 			continue
@@ -112,6 +120,9 @@ func redactValue(value interface{}, key string, hash bool) interface{} {
 		}
 		return typed
 	case string:
+		if key == "__type" {
+			return typed
+		}
 		if isSensitiveKey(key) {
 			return redactToken(key, typed, hash)
 		}

@@ -36,10 +36,10 @@ func TestIsOWAURLVariants(t *testing.T) {
 		{"https://outlook.live.com/mail/0/inbox", true},
 		{"https://outlook.cloud.microsoft/mail/", true},
 		{"https://outlook.cloud.microsoft/mail/inbox", true},
+		{"https://outlook.office.com/owa/", true},
+		{"https://outlook.office.com/calendar/", true},
 
 		// Should not match
-		{"https://outlook.office.com/calendar/", false},
-		{"https://outlook.office.com/owa/", false},
 		{"https://login.microsoftonline.com/", false},
 		{"https://google.com/mail", false},
 		{"https://mail.google.com/", false},

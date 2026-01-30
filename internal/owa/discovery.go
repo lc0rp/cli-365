@@ -40,15 +40,109 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 
 	// Get user email from page state
 	userEmail, _ := getUserEmailFromPage(page)
+	// Get session headers from page
+	session, _ := getSessionHeadersFromPage(page)
+	if session.AnchorMailbox == "" && userEmail != "" {
+		session.AnchorMailbox = userEmail
+	}
 
 	tokens := &Tokens{
 		Canary:      canary,
 		Bearer:      bearer,
 		UserEmail:   userEmail,
+		Session:     session,
 		ExtractedAt: time.Now(),
 	}
 
 	return tokens, nil
+}
+
+func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
+	result, err := page.Eval(`() => {
+		const isGuid = (v) => typeof v === "string" && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v);
+		const pick = (obj, keys) => {
+			if (!obj || typeof obj !== "object") return null;
+			for (const k of keys) {
+				if (obj[k]) return obj[k];
+			}
+			return null;
+		};
+		const merge = (dst, src) => {
+			if (!src) return dst;
+			if (src.sessionId && !dst.sessionId) dst.sessionId = src.sessionId;
+			if (src.anchorMailbox && !dst.anchorMailbox) dst.anchorMailbox = src.anchorMailbox;
+			if (src.tenantId && !dst.tenantId) dst.tenantId = src.tenantId;
+			return dst;
+		};
+		const fromObj = (obj) => {
+			if (!obj || typeof obj !== "object") return null;
+			const sessionId = pick(obj, ["sessionId", "SessionId", "owaSessionId", "OWASessionId"]);
+			const tenantId = pick(obj, ["tenantId", "TenantId"]);
+			const anchorMailbox = pick(obj, ["anchorMailbox", "AnchorMailbox", "primarySmtpAddress", "PrimarySmtpAddress"]);
+			const out = {};
+			if (sessionId && isGuid(sessionId)) out.sessionId = sessionId;
+			if (tenantId && isGuid(tenantId)) out.tenantId = tenantId;
+			if (anchorMailbox && typeof anchorMailbox === "string") out.anchorMailbox = anchorMailbox;
+			return Object.keys(out).length ? out : null;
+		};
+		const out = {};
+
+		const w = window;
+		merge(out, fromObj(w.owa && w.owa.sessionData));
+		merge(out, fromObj(w.owaSettings));
+		merge(out, fromObj(w.__owa));
+		merge(out, fromObj(w.__OWA));
+
+		for (const key of Object.keys(w)) {
+			if (!/STATE|CONFIG|SESSION/i.test(key)) continue;
+			try {
+				merge(out, fromObj(w[key]));
+			} catch {}
+		}
+
+		const scanStorage = (storage) => {
+			if (!storage) return;
+			for (const key of Object.keys(storage)) {
+				if (!/session|owa|tenant|anchor/i.test(key)) continue;
+				const raw = storage.getItem(key);
+				if (!raw) continue;
+				if (isGuid(raw)) {
+					merge(out, { sessionId: raw });
+					continue;
+				}
+				try {
+					const parsed = JSON.parse(raw);
+					merge(out, fromObj(parsed));
+				} catch {}
+			}
+		};
+
+		try { scanStorage(localStorage); } catch {}
+		try { scanStorage(sessionStorage); } catch {}
+
+		return out;
+	}`)
+	if err != nil {
+		return SessionHeaders{}, err
+	}
+	if result.Value.Nil() {
+		return SessionHeaders{}, nil
+	}
+
+	var parsed struct {
+		SessionID     string `json:"sessionId"`
+		AnchorMailbox string `json:"anchorMailbox"`
+		TenantID      string `json:"tenantId"`
+	}
+	if err := json.Unmarshal([]byte(result.Value.JSON("", "")), &parsed); err != nil {
+		return SessionHeaders{}, err
+	}
+
+	return SessionHeaders{
+		SessionID:     parsed.SessionID,
+		AnchorMailbox: parsed.AnchorMailbox,
+		TenantID:      parsed.TenantID,
+	}, nil
 }
 
 // getCanaryFromCookies extracts the X-OWA-CANARY cookie value.
@@ -346,6 +440,8 @@ func NavigateToOWA(page *rod.Page) error {
 // WaitForLogin waits for the user to complete login and OWA to load.
 func WaitForLogin(page *rod.Page, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	startupInterval := 3 * time.Second
+	lastStartupCheck := time.Time{}
 
 	for time.Now().Before(deadline) {
 		info, err := page.Info()
@@ -364,6 +460,12 @@ func WaitForLogin(page *rod.Page, timeout time.Duration) error {
 			if canary != "" {
 				return nil
 			}
+		}
+		if isOutlookHostURL(info.URL) && time.Since(lastStartupCheck) >= startupInterval {
+			if canary, err := getCanaryFromStartupData(page); err == nil && canary != "" {
+				return nil
+			}
+			lastStartupCheck = time.Now()
 		}
 
 		time.Sleep(500 * time.Millisecond)
@@ -427,13 +529,18 @@ func WaitForLoggedIn(page *rod.Page, timeout time.Duration) error {
 	}
 
 	deadline := time.Now().Add(timeout)
+	startupInterval := 3 * time.Second
+	lastStartupCheck := time.Time{}
 	for time.Now().Before(deadline) {
 		if IsLoggedIn(page) {
 			return nil
 		}
 		info, err := page.Info()
-		if err == nil && !isOWAURL(info.URL) {
-			_ = NavigateToOWA(page)
+		if err == nil && isOutlookHostURL(info.URL) && time.Since(lastStartupCheck) >= startupInterval {
+			if canary, err := getCanaryFromStartupData(page); err == nil && canary != "" {
+				return nil
+			}
+			lastStartupCheck = time.Now()
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

@@ -1,10 +1,13 @@
 package owa
 
 import (
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-rod/rod"
 )
@@ -190,25 +193,123 @@ func OWAEndpointForPage(page *rod.Page, action string) string {
 }
 
 // CallOWAAction calls an OWA service action with proper formatting.
-func CallOWAAction(page *rod.Page, canary string, action string, body interface{}) (*FetchResponse, error) {
+func CallOWAAction(page *rod.Page, tokens *Tokens, action string, body interface{}) (*FetchResponse, error) {
+	if tokens == nil {
+		return nil, fmt.Errorf("tokens are nil")
+	}
+	if err := SessionFeatures().Check(action); err != nil {
+		return nil, err
+	}
+	endpoint := OWAEndpointForPage(page, action)
+	resp, err := callOWAActionAt(page, tokens, action, body, endpoint)
+	if err == nil && resp != nil && resp.Status == 401 && page != nil {
+		if refreshed, rerr := refreshTokensFromPage(tokens, page); rerr == nil && refreshed != nil {
+			resp, err = callOWAActionAt(page, refreshed, action, body, endpoint)
+		}
+	}
+	if err == nil && resp != nil && resp.Status == 404 {
+		if alt := swapServiceSVCPath(endpoint); alt != "" && alt != endpoint {
+			if retry, rerr := callOWAActionAt(page, tokens, action, body, alt); rerr == nil && retry != nil {
+				resp = retry
+				err = nil
+			}
+		}
+	}
+	return resp, err
+}
+
+func callOWAActionAt(page *rod.Page, tokens *Tokens, action string, body interface{}, endpoint string) (*FetchResponse, error) {
+	fullBody := NewOWARequest(body)
+	payload := interface{}(fullBody)
+	if shouldUseRawBody(page) || isRawOWARequest(body) {
+		payload = body
+	}
 	req := FetchRequest{
-		URL:    OWAEndpointForPage(page, action),
+		URL:    endpoint,
 		Method: "POST",
 		Headers: map[string]string{
-			"Accept":       "application/json",
-			"Content-Type": "application/json",
-			"Action":       action,
+			"Accept":              "application/json",
+			"Content-Type":        "application/json; charset=utf-8",
+			"Action":              action,
+			"Prefer":              "IdType=\"ImmutableId\"",
+			"X-OWA-CorrelationId": newCorrelationID(),
+			"X-OWA-Hosted-UX":     "false",
+			"X-Req-Source":        "Mail",
 		},
-		Body: NewOWARequest(body),
+		Body: payload,
 	}
 
-	return FetchWithCanary(page, canary, req)
+	addURLPostDataHeader(req.Headers, body)
+	if tokens.Bearer != "" {
+		req.Headers["Authorization"] = tokens.Bearer
+	} else if tokens.Canary != "" {
+		req.Headers["X-OWA-CANARY"] = tokens.Canary
+	}
+	if !tokens.Session.IsZero() {
+		SetSessionHeaders(tokens.Session)
+	}
+	applySessionHeaders(req.Headers)
+	applyPreferHeader(req.Headers)
+	resp, err := Fetch(page, req)
+	if err == nil {
+		SessionFeatures().MaybeDisableFromResponse(action, resp)
+	}
+	return resp, err
+}
+
+func isRawOWARequest(body interface{}) bool {
+	payload, ok := body.(map[string]interface{})
+	if !ok || len(payload) == 0 {
+		return false
+	}
+	if _, ok := payload["Header"]; !ok {
+		return false
+	}
+	if _, ok := payload["Body"]; !ok {
+		return false
+	}
+	if _, ok := payload["__type"]; !ok {
+		return false
+	}
+	return true
+}
+
+func swapServiceSVCPath(endpoint string) string {
+	if strings.Contains(endpoint, "/owa/0/service.svc") {
+		return strings.Replace(endpoint, "/owa/0/service.svc", "/owa/service.svc", 1)
+	}
+	if strings.Contains(endpoint, "/owa/service.svc") {
+		return strings.Replace(endpoint, "/owa/service.svc", "/owa/0/service.svc", 1)
+	}
+	return ""
+}
+
+func refreshTokensFromPage(tokens *Tokens, page *rod.Page) (*Tokens, error) {
+	if page == nil {
+		return tokens, errors.New("page is nil")
+	}
+	fresh, err := DiscoverTokens(page)
+	if err != nil {
+		return tokens, err
+	}
+	merged := MergeTokens(tokens, fresh)
+	if merged != nil && !merged.Session.IsZero() {
+		SetSessionHeaders(merged.Session)
+	}
+	if merged != nil {
+		_ = SaveTokens(merged)
+	}
+	return merged, nil
 }
 
 // CallOWAActionWithBearer calls an OWA service action with bearer auth.
 func CallOWAActionWithBearer(page *rod.Page, bearer string, action string, body interface{}) (*FetchResponse, error) {
+	if err := SessionFeatures().Check(action); err != nil {
+		return nil, err
+	}
+	endpoint := OWAEndpointForPage(page, action)
 	req := FetchRequest{
-		URL:    OWAEndpointForPage(page, action),
+		URL:    endpoint,
 		Method: "POST",
 		Headers: map[string]string{
 			"Accept":        "application/json",
@@ -219,5 +320,108 @@ func CallOWAActionWithBearer(page *rod.Page, bearer string, action string, body 
 		Body: NewOWARequest(body),
 	}
 
-	return Fetch(page, req)
+	applySessionHeaders(req.Headers)
+	resp, err := Fetch(page, req)
+	if err == nil {
+		SessionFeatures().MaybeDisableFromResponse(action, resp)
+	}
+	if err == nil && resp != nil && resp.Status == 404 {
+		if alt := swapServiceSVCPath(endpoint); alt != "" && alt != endpoint {
+			req.URL = alt
+			if retry, rerr := Fetch(page, req); rerr == nil && retry != nil {
+				resp = retry
+			}
+		}
+	}
+	return resp, err
+}
+
+func applySessionHeaders(headers map[string]string) {
+	if headers == nil {
+		return
+	}
+	session := CurrentSessionHeaders()
+	if session.SessionID != "" {
+		headers["X-OWA-SessionId"] = session.SessionID
+	}
+	if session.AnchorMailbox != "" {
+		headers["X-AnchorMailbox"] = session.AnchorMailbox
+	}
+	if session.TenantID != "" {
+		headers["X-TenantId"] = session.TenantID
+	}
+}
+
+func applyPreferHeader(headers map[string]string) {
+	if headers == nil {
+		return
+	}
+	session := CurrentSessionHeaders()
+	if session.Prefer == "" {
+		return
+	}
+	existing, ok := headers["Prefer"]
+	if !ok || existing == "" {
+		headers["Prefer"] = session.Prefer
+		return
+	}
+	lowerExisting := strings.ToLower(existing)
+	if strings.Contains(lowerExisting, "exchange.behavior") {
+		return
+	}
+	lowerSession := strings.ToLower(session.Prefer)
+	if strings.Contains(lowerSession, "exchange.behavior") {
+		if strings.Contains(lowerExisting, "idtype") && !strings.Contains(lowerSession, "idtype") {
+			headers["Prefer"] = existing + ", " + session.Prefer
+			return
+		}
+		headers["Prefer"] = session.Prefer
+	}
+}
+
+func addURLPostDataHeader(headers map[string]string, body interface{}) {
+	if headers == nil || body == nil {
+		return
+	}
+	if _, ok := headers["X-OWA-UrlPostData"]; ok {
+		return
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	headers["X-OWA-UrlPostData"] = encodeURLPostData(string(encoded))
+}
+
+func encodeURLPostData(value string) string {
+	escaped := url.QueryEscape(value)
+	return strings.ReplaceAll(escaped, "+", "%20")
+}
+
+func shouldUseRawBody(page *rod.Page) bool {
+	if page == nil {
+		return false
+	}
+	info, err := page.Info()
+	if err != nil || info == nil {
+		return false
+	}
+	return strings.Contains(info.URL, "outlook.cloud.microsoft")
+}
+
+func newCorrelationID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	uuid := fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]),
+		uint16(b[4])<<8|uint16(b[5]),
+		uint16(b[6])<<8|uint16(b[7]),
+		uint16(b[8])<<8|uint16(b[9]),
+		uint64(b[10])<<40|uint64(b[11])<<32|uint64(b[12])<<24|uint64(b[13])<<16|uint64(b[14])<<8|uint64(b[15]),
+	)
+	return fmt.Sprintf("%s_%d", uuid, time.Now().UnixMilli()*100)
 }

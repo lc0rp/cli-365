@@ -3,8 +3,10 @@ package owa
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,7 @@ type NetworkLogOptions struct {
 	BodyTimeout   time.Duration
 	Redact        bool
 	HashRedaction bool
+	CaptureAll    bool
 }
 
 // NetworkLogEntry captures a single network request lifecycle.
@@ -70,6 +73,8 @@ type NetworkLogger struct {
 	opts      NetworkLogOptions
 	wg        sync.WaitGroup
 	canary    string
+	session   SessionHeaders
+	folderIDs map[string]string
 }
 
 // StartNetworkLogger begins capturing network events for a page.
@@ -91,6 +96,10 @@ func StartNetworkLogger(page *rod.Page, opts NetworkLogOptions) (*NetworkLogger,
 	wait := page.Context(ctx).EachEvent(
 		func(e *proto.NetworkRequestWillBeSent) bool {
 			logger.onRequest(e)
+			return false
+		},
+		func(e *proto.NetworkRequestWillBeSentExtraInfo) bool {
+			logger.onRequestExtraInfo(e)
 			return false
 		},
 		func(e *proto.NetworkResponseReceived) bool {
@@ -145,12 +154,14 @@ func (l *NetworkLogger) onRequest(e *proto.NetworkRequestWillBeSent) {
 	if shouldCaptureHeaders(e.Request.URL) {
 		raw := headersToStringMap(e.Request.Headers)
 		l.maybeSetCanary(raw)
+		l.maybeSetSessionHeaders(raw)
+		l.maybeSetFolderIDs(raw)
 		entry.RequestHeaders = l.maybeRedactHeaders(raw)
 	}
 	l.index[e.RequestID] = len(l.entries)
 	l.entries = append(l.entries, entry)
 
-	if l.opts.CaptureBodies && e.Request.HasPostData && shouldCaptureBody(entry.URL) {
+	if l.opts.CaptureBodies && e.Request.HasPostData && l.shouldCaptureBody(entry.URL) {
 		l.wg.Add(1)
 		reqID := e.RequestID
 		go func() {
@@ -193,6 +204,7 @@ func (l *NetworkLogger) onResponse(e *proto.NetworkResponseReceived) {
 	if shouldCaptureHeaders(e.Response.URL) {
 		raw := headersToStringMap(e.Response.Headers)
 		l.maybeSetCanary(raw)
+		l.maybeSetSessionHeaders(raw)
 		entry.ResponseHeaders = l.maybeRedactHeaders(raw)
 	}
 	if entry.URL == "" {
@@ -201,6 +213,39 @@ func (l *NetworkLogger) onResponse(e *proto.NetworkResponseReceived) {
 	if entry.ResourceType == "" {
 		entry.ResourceType = string(e.Type)
 	}
+}
+
+func (l *NetworkLogger) onRequestExtraInfo(e *proto.NetworkRequestWillBeSentExtraInfo) {
+	if e == nil {
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	idx, ok := l.index[e.RequestID]
+	if !ok {
+		if len(l.entries) >= l.max {
+			l.dropped++
+			return
+		}
+		entry := NetworkLogEntry{
+			RequestID: string(e.RequestID),
+		}
+		l.index[e.RequestID] = len(l.entries)
+		l.entries = append(l.entries, entry)
+		idx = len(l.entries) - 1
+	}
+
+	entry := &l.entries[idx]
+	raw := headersToStringMap(e.Headers)
+	if len(raw) == 0 {
+		return
+	}
+	l.maybeSetCanary(raw)
+	l.maybeSetSessionHeaders(raw)
+	l.maybeSetFolderIDs(raw)
+	entry.RequestHeaders = l.maybeRedactHeaders(raw)
 }
 
 func (l *NetworkLogger) onFailed(e *proto.NetworkLoadingFailed) {
@@ -247,7 +292,7 @@ func (l *NetworkLogger) onFinished(e *proto.NetworkLoadingFinished) {
 	}
 	l.mu.Unlock()
 
-	if !ok || !shouldCaptureBody(url) {
+	if !ok || !l.shouldCaptureBody(url) {
 		return
 	}
 
@@ -292,6 +337,25 @@ func (l *NetworkLogger) Canary() string {
 	return l.canary
 }
 
+func (l *NetworkLogger) SessionHeaders() SessionHeaders {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.session
+}
+
+func (l *NetworkLogger) FolderIDs() map[string]string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.folderIDs) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(l.folderIDs))
+	for k, v := range l.folderIDs {
+		out[k] = v
+	}
+	return out
+}
+
 func (l *NetworkLogger) maybeSetCanary(headers map[string]string) {
 	if l.canary != "" || len(headers) == 0 {
 		return
@@ -302,6 +366,127 @@ func (l *NetworkLogger) maybeSetCanary(headers map[string]string) {
 			return
 		}
 	}
+}
+
+func (l *NetworkLogger) maybeSetSessionHeaders(headers map[string]string) {
+	if len(headers) == 0 {
+		return
+	}
+	if l.session.SessionID == "" {
+		l.session.SessionID = headerValue(headers, "x-owa-sessionid")
+	}
+	if l.session.AnchorMailbox == "" {
+		l.session.AnchorMailbox = headerValue(headers, "x-anchormailbox")
+	}
+	if l.session.TenantID == "" {
+		l.session.TenantID = headerValue(headers, "x-tenantid")
+	}
+	if l.session.Prefer == "" {
+		if prefer := headerValue(headers, "prefer"); prefer != "" {
+			l.session.Prefer = prefer
+		}
+	}
+	if l.session.OwaAppID == "" {
+		if val := headerValue(headers, "owaappid"); val != "" {
+			l.session.OwaAppID = val
+		}
+	}
+	if l.session.ClientID == "" {
+		if val := headerValue(headers, "x-clientid"); val != "" {
+			l.session.ClientID = val
+		}
+	}
+	if l.session.ClientFlights == "" {
+		if val := headerValue(headers, "x-client-flights"); val != "" {
+			l.session.ClientFlights = val
+		}
+	}
+	if l.session.RoutingKey == "" {
+		if val := headerValue(headers, "x-routingparameter-sessionkey"); val != "" {
+			l.session.RoutingKey = val
+		}
+	}
+	if l.session.MSAppName == "" {
+		if val := headerValue(headers, "x-ms-appname"); val != "" {
+			l.session.MSAppName = val
+		}
+	}
+	if l.session.SearchGriffin == "" {
+		if val := headerValue(headers, "x-search-griffin-version"); val != "" {
+			l.session.SearchGriffin = val
+		}
+	}
+}
+
+func (l *NetworkLogger) maybeSetFolderIDs(headers map[string]string) {
+	if len(headers) == 0 {
+		return
+	}
+	if l.folderIDs == nil {
+		l.folderIDs = make(map[string]string)
+	}
+	if l.folderIDs["inbox"] != "" {
+		return
+	}
+	raw := headerValue(headers, "x-owa-urlpostdata")
+	if raw == "" {
+		return
+	}
+	decoded, err := url.QueryUnescape(raw)
+	if err != nil {
+		return
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(decoded), &payload); err != nil {
+		return
+	}
+	if id := findFolderID(payload); id != "" {
+		l.folderIDs["inbox"] = id
+	}
+}
+
+func findFolderID(payload map[string]interface{}) string {
+	if payload == nil {
+		return ""
+	}
+	folders, ok := payload["Folders"].([]interface{})
+	if ok && len(folders) > 0 {
+		if id := findFolderIDInValue(folders[0]); id != "" {
+			return id
+		}
+	}
+	if id := findFolderIDInValue(payload); id != "" {
+		return id
+	}
+	return ""
+}
+
+func findFolderIDInValue(value interface{}) string {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		if folderID, ok := v["FolderId"].(map[string]interface{}); ok {
+			if base, ok := folderID["BaseFolderId"].(map[string]interface{}); ok {
+				if id, ok := base["Id"].(string); ok {
+					return id
+				}
+			}
+			if id, ok := folderID["Id"].(string); ok {
+				return id
+			}
+		}
+		for _, child := range v {
+			if id := findFolderIDInValue(child); id != "" {
+				return id
+			}
+		}
+	case []interface{}:
+		for _, child := range v {
+			if id := findFolderIDInValue(child); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
 }
 
 func (l *NetworkLogger) maybeRedactHeaders(headers map[string]string) map[string]string {
@@ -394,7 +579,10 @@ func shouldCaptureHeaders(rawURL string) bool {
 	return strings.Contains(lower, "outlook.") || strings.Contains(lower, "/owa/")
 }
 
-func shouldCaptureBody(rawURL string) bool {
+func (l *NetworkLogger) shouldCaptureBody(rawURL string) bool {
+	if l.opts.CaptureAll {
+		return true
+	}
 	lower := strings.ToLower(rawURL)
 	return strings.Contains(lower, "/owa/service.svc") || strings.Contains(lower, "/owa/startupdata.ashx")
 }

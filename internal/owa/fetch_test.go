@@ -2,6 +2,7 @@ package owa
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +124,33 @@ func TestNewOWARequestSerialization(t *testing.T) {
 	}
 	if _, ok := parsed["Body"]; !ok {
 		t.Error("Serialized request missing Body")
+	}
+}
+
+func TestSwapServiceSVCPath(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		want     string
+	}{
+		{"https://outlook.office.com/owa/0/service.svc?action=FindItem", "https://outlook.office.com/owa/service.svc?action=FindItem"},
+		{"https://outlook.office.com/owa/service.svc?action=FindItem", "https://outlook.office.com/owa/0/service.svc?action=FindItem"},
+		{"https://example.com/api", ""},
+	}
+	for _, tt := range cases {
+		if got := swapServiceSVCPath(tt.endpoint); got != tt.want {
+			t.Fatalf("swapServiceSVCPath(%q) = %q, want %q", tt.endpoint, got, tt.want)
+		}
+	}
+}
+
+func TestEncodeURLPostData(t *testing.T) {
+	input := `{"Body":"The force be with you"}`
+	escaped := encodeURLPostData(input)
+	if strings.Contains(escaped, "+") {
+		t.Fatalf("expected no + in encoded output: %s", escaped)
+	}
+	if !strings.Contains(escaped, "%20") {
+		t.Fatalf("expected spaces to be encoded as %%20: %s", escaped)
 	}
 }
 

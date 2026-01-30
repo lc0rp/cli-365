@@ -33,6 +33,7 @@ browser:
   headless: true
   no_sandbox: false  # Set true for containers/root users
   cdp_endpoint: ""   # Empty = auto-start managed browser
+  cdp_port: 0        # Optional fixed CDP port for managed browser
 auth:
   tenant: "common"
   account_hint: ""   # Pre-fill email on login
@@ -78,6 +79,9 @@ security:
 # Start the managed browser
 cli-365 browser start
 
+# Start with a fixed CDP port
+cli-365 browser start --cdp-port 9222
+
 # Check browser status
 cli-365 browser status
 
@@ -104,9 +108,16 @@ cli-365 auth logout
 # Search messages
 cli-365 mail search "keyword"
 cli-365 mail search --limit 50 "meeting"
+cli-365 mail search --provider searchservice "meeting"
+cli-365 mail search --from "alice@example.com" --since 2026-01-01
+cli-365 mail search --subject "quarterly report" --before 2026-01-20
+cli-365 mail search --cc "team@example.com" --has-attachments --unread
+cli-365 mail search --query 'from:"alice@example.com" subject:"Q4" hasattachment:true'
 
 # View a single message
 cli-365 mail view <message-id>
+cli-365 mail view --index 3
+cli-365 mail view #3
 
 # Get a thread/conversation
 cli-365 mail thread get <conversation-id>
@@ -126,12 +137,27 @@ cli-365 mail draft send <draft-id>
 # Send a message directly (creates and sends)
 cli-365 mail send --to "user@example.com" --subject "Hello" --body "Message body"
 
+# Reply to a message
+cli-365 mail reply <message-id> --body "Thanks!"
+cli-365 mail reply <message-id> --body "All here" --all
+cli-365 mail reply <message-id> "Thanks!"  # body as positional
+cli-365 mail reply --index 3 --body "Thanks!"  # use cached search index
+cli-365 mail reply #3 "Thanks!"               # shorthand
+
 # List attachments for a message
 cli-365 mail attachments list <message-id>
 
 # Download an attachment
 cli-365 mail attachments download <attachment-id> [output-path]
 ```
+
+Notes:
+- Search uses the Outlook searchservice endpoint by default and falls back to OWA service.svc.
+- Use `--provider owa|searchservice|auto` to force a backend.
+- `--from`, `--to`, `--cc`, `--bcc`, `--subject`, `--since`, `--after`, `--before`, `--has-attachments`, `--unread`, `--is-read` compile into the query string used by Outlook search.
+- Dates accept `YYYY-MM-DD` or RFC3339. RFC3339 values preserve time granularity in the query.
+- `--query` passes a raw query string and skips auto-escaping/assembly.
+- For `mail reply`, flags can appear after the message ID; you can also pass the body as the second positional argument.
 
 ### JSON Output
 
@@ -142,6 +168,55 @@ cli-365 --json mail search "invoice"
 cli-365 --json auth status
 ```
 
+#### Search JSON shape
+
+`mail search` returns:
+
+```json
+{
+  "TotalCount": 42,
+  "Messages": [
+    {
+      "ItemId": "...",
+      "ConversationId": "...",
+      "Subject": "...",
+      "BodyPreview": "...",
+      "DateTimeReceived": "...",
+      "From": { "EmailAddress": "..." }
+    }
+  ],
+  "Conversations": [
+    {
+      "ConversationId": "...",
+      "ConversationTopic": "...",
+      "LastDeliveryTime": "...",
+      "UnreadCount": 0,
+      "MessageCount": 1,
+      "Preview": "..."
+    }
+  ]
+}
+```
+
+Notes:
+- When using searchservice, `Messages` are representative items for each conversation hit (use `mail view` or `mail thread get` for full details).
+
+### CDP Port Override
+
+Override the configured CDP port for a single run:
+
+```bash
+cli-365 --cdp-port 9222 --ensure-cdp mail search "invoice"
+```
+
+### Ensure CDP
+
+If your config points at a CDP endpoint that might be stale, use `--ensure-cdp` to start a managed browser and wait for login.
+
+```bash
+cli-365 --ensure-cdp --ensure-cdp-timeout 5m mail search "invoice"
+```
+
 ### Debug / Discovery
 
 ```bash
@@ -150,6 +225,13 @@ cli-365 debug discover --out ./owa-templates.json
 
 # Include network-level request log
 cli-365 debug discover --netlog ./owa-netlog.json
+
+# Capture network activity until Enter is pressed
+cli-365 debug capture --netlog ./owa-capture.json
+
+# Capture all pages or all CDP targets (including service/background workers)
+cli-365 debug capture --all-pages --netlog ./owa-capture.json
+cli-365 debug capture --all-targets --netlog ./owa-capture.json
 ```
 
 ## How It Works

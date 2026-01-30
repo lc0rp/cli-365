@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -45,6 +48,9 @@ func Start(_ context.Context, cfg config.Config) (*RuntimeInfo, error) {
 	}
 
 	l := launcher.New().Headless(cfg.Browser.Headless).UserDataDir(profileDir)
+	if cfg.Browser.CDPPort > 0 {
+		l = l.Set("remote-debugging-port", strconv.Itoa(cfg.Browser.CDPPort))
+	}
 	if !cfg.Browser.Headless {
 		l = l.Delete("no-startup-window")
 		l = l.Leakless(false)
@@ -139,12 +145,55 @@ func Connect(ctx context.Context) (*rod.Browser, error) {
 		return nil, errors.New("no browser running - run 'browser start' first")
 	}
 
-	browser := rod.New().ControlURL(rt.WSEndpoint)
+	return ConnectEndpoint(rt.WSEndpoint)
+}
+
+// ConnectEndpoint connects to a specific CDP websocket endpoint.
+func ConnectEndpoint(endpoint string) (*rod.Browser, error) {
+	if endpoint == "" {
+		return nil, errors.New("cdp endpoint is empty")
+	}
+	browser := rod.New().ControlURL(endpoint)
 	if err := browser.Connect(); err != nil {
 		return nil, err
 	}
-
 	return browser, nil
+}
+
+// ConnectPort connects to a CDP instance running on a fixed port.
+func ConnectPort(port int) (*rod.Browser, error) {
+	endpoint, err := ResolveWSEndpoint(port)
+	if err != nil {
+		return nil, err
+	}
+	return ConnectEndpoint(endpoint)
+}
+
+// ResolveWSEndpoint resolves the websocket debugger endpoint for a CDP port.
+func ResolveWSEndpoint(port int) (string, error) {
+	if port <= 0 {
+		return "", errors.New("cdp port must be positive")
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%d/json/version", port)
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("cdp version endpoint returned %s", resp.Status)
+	}
+	var payload struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	if payload.WebSocketDebuggerURL == "" {
+		return "", errors.New("cdp websocket endpoint missing")
+	}
+	return payload.WebSocketDebuggerURL, nil
 }
 
 // EnsureBrowser ensures a browser is running, starting one if needed.
@@ -163,6 +212,19 @@ func EnsureBrowser(ctx context.Context, cfg config.Config) (*rod.Browser, error)
 			return nil, err
 		}
 		return browser, nil
+	}
+	if cfg.Browser.CDPPort > 0 {
+		if endpoint, err := ResolveWSEndpoint(cfg.Browser.CDPPort); err == nil {
+			if browser, err := ConnectEndpoint(endpoint); err == nil {
+				_ = SaveRuntime(&RuntimeInfo{
+					WSEndpoint: endpoint,
+					PID:        0,
+					Managed:    false,
+					StartedAt:  time.Now(),
+				})
+				return browser, nil
+			}
+		}
 	}
 
 	// Try to connect to existing browser

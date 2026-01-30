@@ -84,6 +84,20 @@ func TestUnmarshalSearchResponse(t *testing.T) {
 	}
 }
 
+func TestMessageUnmarshalItemIdObject(t *testing.T) {
+	raw := []byte(`{"ItemId":{"Id":"abc123","ChangeKey":"ck1"},"Subject":"Hello"}`)
+	var msg Message
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if msg.ID != "abc123" {
+		t.Fatalf("ID = %q, want abc123", msg.ID)
+	}
+	if msg.ChangeKey != "ck1" {
+		t.Fatalf("ChangeKey = %q, want ck1", msg.ChangeKey)
+	}
+}
+
 func TestEmailAddress(t *testing.T) {
 	addr := EmailAddress{
 		Name:    "John Doe",
@@ -169,10 +183,10 @@ func TestDraft(t *testing.T) {
 
 func TestConversation(t *testing.T) {
 	conv := Conversation{
-		ID:          "conv-id",
-		Topic:       "Conversation Topic",
+		ID:           "conv-id",
+		Topic:        "Conversation Topic",
 		MessageCount: 5,
-		UnreadCount: 2,
+		UnreadCount:  2,
 		Messages: []Message{
 			{ID: "msg1", Subject: "Re: Topic"},
 			{ID: "msg2", Subject: "Re: Re: Topic"},
