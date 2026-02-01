@@ -47,3 +47,24 @@ func TestCachedSearchRoundTrip(t *testing.T) {
 		t.Fatalf("cache path should include directory")
 	}
 }
+
+func TestParseTrailingIntFlag(t *testing.T) {
+	value, ok := parseTrailingIntFlag([]string{"test", "--limit", "5"}, []string{"--limit", "-n"})
+	if !ok || value != 5 {
+		t.Fatalf("parseTrailingIntFlag value=%d ok=%v", value, ok)
+	}
+	value, ok = parseTrailingIntFlag([]string{"test", "-n", "7"}, []string{"--limit", "-n"})
+	if !ok || value != 7 {
+		t.Fatalf("parseTrailingIntFlag short value=%d ok=%v", value, ok)
+	}
+	value, ok = parseTrailingIntFlag([]string{"test", "--limit=9"}, []string{"--limit", "-n"})
+	if !ok || value != 9 {
+		t.Fatalf("parseTrailingIntFlag eq value=%d ok=%v", value, ok)
+	}
+	if _, ok = parseTrailingIntFlag([]string{"test", "--limit", "x"}, []string{"--limit", "-n"}); ok {
+		t.Fatalf("expected parse failure for non-int")
+	}
+	if _, ok = parseTrailingIntFlag([]string{"test", "--limit"}, []string{"--limit", "-n"}); ok {
+		t.Fatalf("expected parse failure for missing value")
+	}
+}

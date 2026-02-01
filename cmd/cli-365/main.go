@@ -642,6 +642,11 @@ func mailCommand() *cli.Command {
 						}
 					}
 					limit := c.Int("limit")
+					if !c.IsSet("limit") {
+						if parsed, ok := parseTrailingIntFlag(c.Args().Slice(), []string{"--limit", "-n"}); ok {
+							limit = parsed
+						}
+					}
 					folder := c.String("folder")
 					provider, err := parseSearchProvider(c.String("provider"))
 					if err != nil {
@@ -790,18 +795,49 @@ func mailCommand() *cli.Command {
 						Name:      "get",
 						Usage:     "Get thread/conversation details",
 						ArgsUsage: "<conversation-id>",
+						Flags: []cli.Flag{
+							&cli.IntFlag{Name: "index", Aliases: []string{"i"}, Usage: "Use cached search result index"},
+							&cli.StringFlag{Name: "message-id", Usage: "Resolve conversation from message ID"},
+						},
 						Action: func(c *cli.Context) error {
-							if c.NArg() < 1 {
-								return cli.Exit("conversation ID required", 1)
-							}
-
 							client, err := getOWAClient(c)
 							if err != nil {
 								return err
 							}
 
-							convID := c.Args().First()
-							conv, err := owa.GetConversation(client.Page(), client.Tokens(), convID, "")
+							args := c.Args().Slice()
+							index := c.Int("index")
+							messageID := strings.TrimSpace(c.String("message-id"))
+							if index == 0 && len(args) > 0 && strings.HasPrefix(args[0], "#") {
+								if parsed, err := parseIndexArg(args[0]); err == nil {
+									index = parsed
+									args = args[1:]
+								}
+							}
+							if index > 0 {
+								resolved, err := resolveCachedMessageID(index)
+								if err != nil {
+									return err
+								}
+								messageID = resolved
+							}
+							convID := ""
+							folderID := ""
+							if messageID != "" {
+								msg, err := owa.GetMessage(client.Page(), client.Tokens(), messageID)
+								if err != nil {
+									return err
+								}
+								convID = msg.ConversationID
+								folderID = msg.ParentFolderId
+							} else if len(args) > 0 {
+								convID = args[0]
+							}
+							if strings.TrimSpace(convID) == "" {
+								return cli.Exit("conversation ID required", 1)
+							}
+
+							conv, err := owa.GetConversation(client.Page(), client.Tokens(), convID, folderID)
 							if err != nil {
 								return err
 							}
@@ -1276,6 +1312,33 @@ func parseIndexArg(raw string) (int, error) {
 		return 0, fmt.Errorf("invalid index: %s", raw)
 	}
 	return index, nil
+}
+
+func parseTrailingIntFlag(args []string, names []string) (int, bool) {
+	if len(args) == 0 || len(names) == 0 {
+		return 0, false
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		for _, name := range names {
+			if arg == name {
+				if i+1 < len(args) {
+					if value, err := strconv.Atoi(args[i+1]); err == nil {
+						return value, true
+					}
+				}
+				continue
+			}
+			prefix := name + "="
+			if strings.HasPrefix(arg, prefix) {
+				value := strings.TrimPrefix(arg, prefix)
+				if parsed, err := strconv.Atoi(value); err == nil {
+					return parsed, true
+				}
+			}
+		}
+	}
+	return 0, false
 }
 
 func lastSearchPath() string {

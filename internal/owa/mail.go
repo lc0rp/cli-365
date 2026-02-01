@@ -28,14 +28,27 @@ func SearchMessages(page *rod.Page, tokens *Tokens, query string, folderID strin
 func SearchMessagesWithProvider(page *rod.Page, tokens *Tokens, query string, folderID string, maxResults int, provider SearchProvider) (*SearchResult, error) {
 	switch provider {
 	case SearchProviderSearchService:
-		return SearchMessagesSearchService(page, tokens, query, folderID, maxResults)
+		res, err := SearchMessagesSearchService(page, tokens, query, folderID, maxResults)
+		if res != nil {
+			limitSearchResults(res, maxResults)
+		}
+		return res, err
 	case SearchProviderOWA:
-		return searchMessagesOWA(page, tokens, query, folderID, maxResults)
+		res, err := searchMessagesOWA(page, tokens, query, folderID, maxResults)
+		if res != nil {
+			limitSearchResults(res, maxResults)
+		}
+		return res, err
 	case SearchProviderAuto:
 		if res, err := SearchMessagesSearchService(page, tokens, query, folderID, maxResults); err == nil {
+			limitSearchResults(res, maxResults)
 			return res, nil
 		}
-		return searchMessagesOWA(page, tokens, query, folderID, maxResults)
+		res, err := searchMessagesOWA(page, tokens, query, folderID, maxResults)
+		if res != nil {
+			limitSearchResults(res, maxResults)
+		}
+		return res, err
 	default:
 		return nil, fmt.Errorf("unknown search provider: %s", provider)
 	}
@@ -289,21 +302,11 @@ func SearchConversations(page *rod.Page, tokens *Tokens, query string, folderID 
 
 // GetMessage retrieves a single message by ID.
 func GetMessage(page *rod.Page, tokens *Tokens, messageID string) (*Message, error) {
-	body := map[string]interface{}{
-		"ItemShape": map[string]interface{}{
-			"BaseShape":          "Default",
-			"IncludeMimeContent": false,
-			"AdditionalProperties": []map[string]interface{}{
-				{"FieldURI": "item:Body"},
-				{"FieldURI": "item:Attachments"},
-			},
-		},
-		"ItemIds": []map[string]interface{}{
-			{"__type": "ItemId:#Exchange", "Id": messageID},
-		},
+	reqBody, err := buildGetItemRequest(messageID)
+	if err != nil {
+		return nil, err
 	}
-
-	resp, err := CallOWAAction(page, tokens, "GetItem", body)
+	resp, err := CallOWAAction(page, tokens, "GetItem", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -313,59 +316,24 @@ func GetMessage(page *rod.Page, tokens *Tokens, messageID string) (*Message, err
 	}
 
 	// Parse response
-	var wrapper struct {
-		Body struct {
-			Items []Message `json:"Items"`
-		} `json:"Body"`
+	items, err := extractMessagesFromResponse(resp.Body)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(resp.Body, &wrapper); err != nil {
-		return nil, fmt.Errorf("failed to parse message response: %w", err)
-	}
-
-	if len(wrapper.Body.Items) == 0 {
+	if len(items) == 0 {
 		return nil, errors.New("message not found")
 	}
 
-	return &wrapper.Body.Items[0], nil
+	return &items[0], nil
 }
 
 // GetConversation retrieves all messages in a conversation.
 func GetConversation(page *rod.Page, tokens *Tokens, conversationID string, folderID string) (*Conversation, error) {
-	body := map[string]interface{}{
-		"ItemShape": map[string]interface{}{
-			"BaseShape": "Default",
-			"AdditionalProperties": []map[string]interface{}{
-				{"FieldURI": "item:Body"},
-				{"FieldURI": "item:Attachments"},
-			},
-		},
-		"MaxItemsToReturn": 100,
-		"SortOrder":        "DateOrderAscending",
+	reqBody, err := buildGetConversationItemsRequest(conversationID, folderID)
+	if err != nil {
+		return nil, err
 	}
-
-	if folderID != "" {
-		body["Conversations"] = []map[string]interface{}{
-			{
-				"ConversationId": map[string]interface{}{
-					"__type": "ItemId:#Exchange",
-					"Id":     conversationID,
-				},
-				"SyncState": nil,
-			},
-		}
-		body["FoldersToIgnore"] = []map[string]interface{}{}
-	} else {
-		body["Conversations"] = []map[string]interface{}{
-			{
-				"ConversationId": map[string]interface{}{
-					"__type": "ItemId:#Exchange",
-					"Id":     conversationID,
-				},
-			},
-		}
-	}
-
-	resp, err := CallOWAAction(page, tokens, "GetConversationItems", body)
+	resp, err := CallOWAAction(page, tokens, "GetConversationItems", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +359,24 @@ func GetConversation(page *rod.Page, tokens *Tokens, conversationID string, fold
 	}
 
 	if len(wrapper.Body.Conversations) == 0 {
-		return nil, errors.New("conversation not found")
+		messages, ferr := fetchConversationMessagesViaGraph(page, tokens, conversationID, 20)
+		if ferr != nil {
+			messages, ferr = fetchConversationMessagesViaSubstrate(page, tokens, conversationID, 20)
+			if ferr != nil {
+				return nil, ferr
+			}
+		}
+		if len(messages) == 0 {
+			return nil, errors.New("conversation not found")
+		}
+		conv := &Conversation{
+			ID:       conversationID,
+			Messages: messages,
+		}
+		if len(conv.Messages) > 0 {
+			conv.Topic = conv.Messages[0].Subject
+		}
+		return conv, nil
 	}
 
 	conv := &Conversation{
@@ -407,56 +392,11 @@ func GetConversation(page *rod.Page, tokens *Tokens, conversationID string, fold
 
 // CreateDraft creates a new draft message.
 func CreateDraft(page *rod.Page, tokens *Tokens, draft *Draft) (*Message, error) {
-	body := map[string]interface{}{
-		"Items": []map[string]interface{}{
-			{
-				"__type":  "Message:#Exchange",
-				"Subject": draft.Subject,
-			},
-		},
-		"MessageDisposition": "SaveOnly",
+	reqBody, err := buildCreateDraftRequest(draft, tokens)
+	if err != nil {
+		return nil, err
 	}
-
-	item := body["Items"].([]map[string]interface{})[0]
-
-	if draft.Body != nil {
-		item["Body"] = map[string]interface{}{
-			"__type":   "BodyContentType:#Exchange",
-			"BodyType": draft.Body.BodyType,
-			"Value":    draft.Body.Value,
-		}
-	}
-
-	if len(draft.ToRecipients) > 0 {
-		recipients := make([]map[string]interface{}, len(draft.ToRecipients))
-		for i, r := range draft.ToRecipients {
-			recipients[i] = map[string]interface{}{
-				"Name":         r.Name,
-				"EmailAddress": r.Address,
-				"RoutingType":  "SMTP",
-				"MailboxType":  "Mailbox",
-			}
-		}
-		item["ToRecipients"] = recipients
-	}
-
-	if len(draft.CcRecipients) > 0 {
-		recipients := make([]map[string]interface{}, len(draft.CcRecipients))
-		for i, r := range draft.CcRecipients {
-			recipients[i] = map[string]interface{}{
-				"Name":         r.Name,
-				"EmailAddress": r.Address,
-				"RoutingType":  "SMTP",
-			}
-		}
-		item["CcRecipients"] = recipients
-	}
-
-	if draft.Importance != "" {
-		item["Importance"] = draft.Importance
-	}
-
-	resp, err := CallOWAAction(page, tokens, "CreateItem", body)
+	resp, err := CallOWAAction(page, tokens, "CreateItem", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -465,93 +405,24 @@ func CreateDraft(page *rod.Page, tokens *Tokens, draft *Draft) (*Message, error)
 		return nil, fmt.Errorf("create draft failed with status %d: %s", resp.Status, resp.StatusText)
 	}
 
-	var wrapper struct {
-		Body struct {
-			Items []Message `json:"Items"`
-		} `json:"Body"`
+	items, err := extractMessagesFromResponse(resp.Body)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(resp.Body, &wrapper); err != nil {
-		return nil, fmt.Errorf("failed to parse create response: %w", err)
-	}
-
-	if len(wrapper.Body.Items) == 0 {
+	if len(items) == 0 {
 		return nil, errors.New("draft creation returned no items")
 	}
 
-	return &wrapper.Body.Items[0], nil
+	return &items[0], nil
 }
 
 // UpdateDraft updates an existing draft message.
 func UpdateDraft(page *rod.Page, tokens *Tokens, draftID string, draft *Draft) (*Message, error) {
-	changes := []map[string]interface{}{}
-
-	if draft.Subject != "" {
-		changes = append(changes, map[string]interface{}{
-			"__type": "SetItemField:#Exchange",
-			"Path": map[string]interface{}{
-				"__type":   "PropertyUri:#Exchange",
-				"FieldURI": "item:Subject",
-			},
-			"Item": map[string]interface{}{
-				"__type":  "Message:#Exchange",
-				"Subject": draft.Subject,
-			},
-		})
+	reqBody, err := buildUpdateDraftRequest(draftID, draft)
+	if err != nil {
+		return nil, err
 	}
-
-	if draft.Body != nil {
-		changes = append(changes, map[string]interface{}{
-			"__type": "SetItemField:#Exchange",
-			"Path": map[string]interface{}{
-				"__type":   "PropertyUri:#Exchange",
-				"FieldURI": "item:Body",
-			},
-			"Item": map[string]interface{}{
-				"__type": "Message:#Exchange",
-				"Body": map[string]interface{}{
-					"BodyType": draft.Body.BodyType,
-					"Value":    draft.Body.Value,
-				},
-			},
-		})
-	}
-
-	if len(draft.ToRecipients) > 0 {
-		recipients := make([]map[string]interface{}, len(draft.ToRecipients))
-		for i, r := range draft.ToRecipients {
-			recipients[i] = map[string]interface{}{
-				"Name":         r.Name,
-				"EmailAddress": r.Address,
-				"RoutingType":  "SMTP",
-			}
-		}
-		changes = append(changes, map[string]interface{}{
-			"__type": "SetItemField:#Exchange",
-			"Path": map[string]interface{}{
-				"__type":   "PropertyUri:#Exchange",
-				"FieldURI": "message:ToRecipients",
-			},
-			"Item": map[string]interface{}{
-				"__type":       "Message:#Exchange",
-				"ToRecipients": recipients,
-			},
-		})
-	}
-
-	body := map[string]interface{}{
-		"ItemChanges": []map[string]interface{}{
-			{
-				"ItemId": map[string]interface{}{
-					"__type": "ItemId:#Exchange",
-					"Id":     draftID,
-				},
-				"Updates": changes,
-			},
-		},
-		"MessageDisposition": "SaveOnly",
-	}
-
-	resp, err := CallOWAAction(page, tokens, "UpdateItem", body)
+	resp, err := CallOWAAction(page, tokens, "UpdateItem", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -827,17 +698,194 @@ func buildReplyRequest(messageID string, msg *Message, tokens *Tokens, body *Mes
 	return req, nil
 }
 
+func buildGetItemRequest(messageID string) (map[string]interface{}, error) {
+	if strings.TrimSpace(messageID) == "" {
+		return nil, errors.New("message ID required")
+	}
+	req := map[string]interface{}{
+		"__type": "GetItemJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body": map[string]interface{}{
+			"__type": "GetItemRequest:#Exchange",
+			"ItemShape": map[string]interface{}{
+				"__type":             "ItemResponseShape:#Exchange",
+				"BaseShape":          "Default",
+				"IncludeMimeContent": false,
+				"BodyType":           "HTML",
+				"AdditionalProperties": []map[string]interface{}{
+					{"__type": "PropertyUri:#Exchange", "FieldURI": "item:Body"},
+					{"__type": "PropertyUri:#Exchange", "FieldURI": "item:Attachments"},
+					{"__type": "PropertyUri:#Exchange", "FieldURI": "item:ConversationId"},
+					{"__type": "PropertyUri:#Exchange", "FieldURI": "item:ParentFolderId"},
+				},
+			},
+			"ItemIds": []map[string]interface{}{
+				{"__type": "ItemId:#Exchange", "Id": messageID},
+			},
+		},
+	}
+	return req, nil
+}
+
+func buildGetConversationItemsRequest(conversationID string, folderID string) (map[string]interface{}, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, errors.New("conversation ID required")
+	}
+	conversation := map[string]interface{}{
+		"ConversationId": map[string]interface{}{
+			"__type": "ConversationId:#Exchange",
+			"Id":     conversationID,
+		},
+	}
+	if folderID != "" {
+		conversation["SyncState"] = nil
+		conversation["ParentFolderId"] = map[string]interface{}{
+			"__type": "FolderId:#Exchange",
+			"Id":     folderID,
+		}
+	}
+	body := map[string]interface{}{
+		"__type":           "GetConversationItemsRequest:#Exchange",
+		"MaxItemsToReturn": 100,
+		"SortOrder":        "DateOrderAscending",
+		"ItemShape": map[string]interface{}{
+			"__type":    "ItemResponseShape:#Exchange",
+			"BaseShape": "Default",
+			"BodyType":  "HTML",
+			"AdditionalProperties": []map[string]interface{}{
+				{"__type": "PropertyUri:#Exchange", "FieldURI": "item:Body"},
+				{"__type": "PropertyUri:#Exchange", "FieldURI": "item:Attachments"},
+			},
+		},
+		"Conversations": []map[string]interface{}{conversation},
+	}
+	if folderID != "" {
+		body["FoldersToIgnore"] = []map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"__type": "GetConversationItemsJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body":   body,
+	}, nil
+}
+
+func buildUpdateDraftRequest(draftID string, draft *Draft) (map[string]interface{}, error) {
+	if strings.TrimSpace(draftID) == "" {
+		return nil, errors.New("draft ID required")
+	}
+	if draft == nil {
+		return nil, errors.New("draft is required")
+	}
+	changes := []map[string]interface{}{}
+
+	if draft.Subject != "" {
+		changes = append(changes, map[string]interface{}{
+			"__type": "SetItemField:#Exchange",
+			"Path": map[string]interface{}{
+				"__type":   "PropertyUri:#Exchange",
+				"FieldURI": "item:Subject",
+			},
+			"Item": map[string]interface{}{
+				"__type":  "Message:#Exchange",
+				"Subject": draft.Subject,
+			},
+		})
+	}
+
+	if draft.Body != nil {
+		changes = append(changes, map[string]interface{}{
+			"__type": "SetItemField:#Exchange",
+			"Path": map[string]interface{}{
+				"__type":   "PropertyUri:#Exchange",
+				"FieldURI": "item:Body",
+			},
+			"Item": map[string]interface{}{
+				"__type": "Message:#Exchange",
+				"Body": map[string]interface{}{
+					"BodyType": draft.Body.BodyType,
+					"Value":    draft.Body.Value,
+				},
+			},
+		})
+	}
+
+	if len(draft.ToRecipients) > 0 {
+		recipients := buildDraftRecipients(draft.ToRecipients)
+		changes = append(changes, map[string]interface{}{
+			"__type": "SetItemField:#Exchange",
+			"Path": map[string]interface{}{
+				"__type":   "PropertyUri:#Exchange",
+				"FieldURI": "message:ToRecipients",
+			},
+			"Item": map[string]interface{}{
+				"__type":       "Message:#Exchange",
+				"ToRecipients": recipients,
+			},
+		})
+	}
+
+	body := map[string]interface{}{
+		"__type":             "UpdateItemRequest:#Exchange",
+		"MessageDisposition": "SaveOnly",
+		"ConflictResolution": "AlwaysOverwrite",
+		"ItemChanges": []map[string]interface{}{
+			{
+				"ItemId": map[string]interface{}{
+					"__type": "ItemId:#Exchange",
+					"Id":     draftID,
+				},
+				"Updates": changes,
+			},
+		},
+	}
+	return map[string]interface{}{
+		"__type": "UpdateItemJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body":   body,
+	}, nil
+}
+
+func buildJsonRequestHeader() map[string]interface{} {
+	return map[string]interface{}{
+		"__type":               "JsonRequestHeaders:#Exchange",
+		"RequestServerVersion": "V2018_01_08",
+	}
+}
+
+func limitSearchResults(result *SearchResult, maxResults int) {
+	if result == nil || maxResults <= 0 {
+		return
+	}
+	if len(result.Messages) > maxResults {
+		result.Messages = result.Messages[:maxResults]
+	}
+	if len(result.Conversations) > maxResults {
+		result.Conversations = result.Conversations[:maxResults]
+	}
+}
+
 func buildSendRequest(draft *Draft, tokens *Tokens) (map[string]interface{}, error) {
+	return buildMessageRequest(draft, tokens, "SendAndSaveCopy")
+}
+
+func buildCreateDraftRequest(draft *Draft, tokens *Tokens) (map[string]interface{}, error) {
+	return buildMessageRequest(draft, tokens, "SaveOnly")
+}
+
+func buildMessageRequest(draft *Draft, tokens *Tokens, disposition string) (map[string]interface{}, error) {
 	if draft == nil {
 		return nil, errors.New("draft is required")
 	}
 	if len(draft.ToRecipients) == 0 && len(draft.CcRecipients) == 0 && len(draft.BccRecipients) == 0 {
 		return nil, errors.New("at least one recipient is required")
 	}
+	if disposition == "" {
+		disposition = "SaveOnly"
+	}
 
 	item := map[string]interface{}{
 		"__type":             "Message:#Exchange",
-		"MessageDisposition": "SendAndSaveCopy",
+		"MessageDisposition": disposition,
 		"IsSendIndividually": false,
 		"Importance":         "Normal",
 		"Sensitivity":        "Normal",
@@ -895,7 +943,7 @@ func buildSendRequest(draft *Draft, tokens *Tokens) (map[string]interface{}, err
 			"__type":              "CreateItemRequest:#Exchange",
 			"ClientSupportsIrm":   true,
 			"ComposeOperation":    "newMail",
-			"MessageDisposition":  "SendAndSaveCopy",
+			"MessageDisposition":  disposition,
 			"Items":               []map[string]interface{}{item},
 			"SendOnNotFoundError": true,
 			"RemoteExecute":       false,
@@ -948,6 +996,38 @@ func extractCreatedItem(body json.RawMessage) ItemID {
 		}
 	}
 	return ItemID{}
+}
+
+func extractMessagesFromResponse(body json.RawMessage) ([]Message, error) {
+	if len(body) == 0 {
+		return nil, errors.New("empty response")
+	}
+	var resp struct {
+		Body struct {
+			ResponseMessages struct {
+				Items []struct {
+					Items []Message `json:"Items"`
+				} `json:"Items"`
+			} `json:"ResponseMessages"`
+			Items []Message `json:"Items"`
+		} `json:"Body"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse message response: %w", err)
+	}
+	out := []Message{}
+	for _, item := range resp.Body.ResponseMessages.Items {
+		if len(item.Items) > 0 {
+			out = append(out, item.Items...)
+		}
+	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	if len(resp.Body.Items) > 0 {
+		return resp.Body.Items, nil
+	}
+	return []Message{}, nil
 }
 
 func buildReplyRecipients(msg *Message, tokens *Tokens, replyAll bool) []map[string]interface{} {

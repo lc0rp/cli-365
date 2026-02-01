@@ -234,3 +234,45 @@ func TestAttachment(t *testing.T) {
 		t.Errorf("Size mismatch: got %d, want %d", parsed.Size, att.Size)
 	}
 }
+
+func TestAttachmentUnmarshalObjectID(t *testing.T) {
+	payload := []byte(`{"AttachmentId":{"Id":"att-obj"},"Name":"file.txt","ContentType":"text/plain","Size":42}`)
+	var parsed Attachment
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if parsed.ID != "att-obj" {
+		t.Fatalf("AttachmentId = %q, want att-obj", parsed.ID)
+	}
+	if parsed.Name != "file.txt" {
+		t.Fatalf("Name = %q, want file.txt", parsed.Name)
+	}
+	if parsed.Size != 42 {
+		t.Fatalf("Size = %d, want 42", parsed.Size)
+	}
+}
+
+func TestMessageUnmarshalConversationIDObject(t *testing.T) {
+	payload := []byte(`{"ItemId":"msg-1","ConversationId":{"Id":"conv-1"},"Subject":"Hello"}`)
+	var parsed Message
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if parsed.ID != "msg-1" {
+		t.Fatalf("ItemId = %q, want msg-1", parsed.ID)
+	}
+	if parsed.ConversationID != "conv-1" {
+		t.Fatalf("ConversationId = %q, want conv-1", parsed.ConversationID)
+	}
+}
+
+func TestMessageUnmarshalParentFolderObject(t *testing.T) {
+	payload := []byte(`{"ItemId":"msg-2","ParentFolderId":{"Id":"folder-1"}}`)
+	var parsed Message
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if parsed.ParentFolderId != "folder-1" {
+		t.Fatalf("ParentFolderId = %q, want folder-1", parsed.ParentFolderId)
+	}
+}

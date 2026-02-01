@@ -41,6 +41,8 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	var id string
 	var changeKey string
+	var conversationID string
+	var parentFolderID string
 	if v, ok := raw["ItemId"]; ok {
 		if err := json.Unmarshal(v, &id); err != nil {
 			var item ItemID
@@ -52,6 +54,24 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 			}
 		}
 		delete(raw, "ItemId")
+	}
+	if v, ok := raw["ConversationId"]; ok {
+		if err := json.Unmarshal(v, &conversationID); err != nil {
+			var item ItemID
+			if err := json.Unmarshal(v, &item); err == nil {
+				conversationID = item.ID
+			}
+		}
+		delete(raw, "ConversationId")
+	}
+	if v, ok := raw["ParentFolderId"]; ok {
+		if err := json.Unmarshal(v, &parentFolderID); err != nil {
+			var item ItemID
+			if err := json.Unmarshal(v, &item); err == nil {
+				parentFolderID = item.ID
+			}
+		}
+		delete(raw, "ParentFolderId")
 	}
 	if v, ok := raw["ChangeKey"]; ok {
 		var ck string
@@ -74,6 +94,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	if changeKey != "" {
 		m.ChangeKey = changeKey
+	}
+	if conversationID != "" {
+		m.ConversationID = conversationID
+	}
+	if parentFolderID != "" {
+		m.ParentFolderId = parentFolderID
 	}
 	return nil
 }
@@ -105,6 +131,38 @@ type Attachment struct {
 	Size        int64  `json:"Size,omitempty"`
 	IsInline    bool   `json:"IsInline,omitempty"`
 	ContentID   string `json:"ContentId,omitempty"`
+}
+
+// UnmarshalJSON supports AttachmentId as string or {Id}.
+func (a *Attachment) UnmarshalJSON(data []byte) error {
+	type Alias Attachment
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var id string
+	if v, ok := raw["AttachmentId"]; ok {
+		if err := json.Unmarshal(v, &id); err != nil {
+			var item ItemID
+			if err := json.Unmarshal(v, &item); err == nil {
+				id = item.ID
+			}
+		}
+		delete(raw, "AttachmentId")
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*a = Attachment(alias)
+	if id != "" {
+		a.ID = id
+	}
+	return nil
 }
 
 // Conversation represents an email conversation/thread.

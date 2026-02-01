@@ -5,9 +5,9 @@ A command-line interface for Outlook Web App (OWA) using browser automation. Thi
 ## Features
 
 - **Browser-based authentication**: Uses your existing OWA session, no OAuth app registration needed
-- **Mail operations**: Search, read threads, create/send drafts, manage attachments
+- **Mail operations**: Search, view, reply, drafts, attachments (thread view is experimental)
 - **Persistent sessions**: Browser profile persists between runs for seamless auth
-- **JSON output**: All commands support `--json` flag for scripting
+- **JSON output**: All commands support `--json` (global) for scripting
 
 ## Installation
 
@@ -44,6 +44,19 @@ security:
   keyring: "os"      # Token storage: os | encrypted-file | plain
 ```
 
+## Quickstart
+
+```bash
+# Start or connect to a managed browser and wait for login
+cli-365 --ensure-cdp --cdp-port 9222 auth login
+
+# Search your inbox
+cli-365 --ensure-cdp --cdp-port 9222 mail search "invoice" --limit 5
+
+# View a message from the last search (index is 1-based)
+cli-365 --ensure-cdp --cdp-port 9222 mail view --index 1
+```
+
 ### Security Features
 
 **Readonly Mode**: Restricts operations to read-only commands (search, view, list).
@@ -72,6 +85,22 @@ security:
 ```
 
 ## Usage
+
+### Global Flags
+
+These flags must appear **before** the subcommand:
+
+```bash
+cli-365 --json auth status
+cli-365 --ensure-cdp --cdp-port 9222 mail search "invoice"
+```
+
+Available:
+- `--json`: JSON output for any command
+- `--ensure-cdp`: start managed browser if CDP is unavailable and wait for login
+- `--ensure-cdp-timeout`: max wait (default 5m)
+- `--cdp-port`: override configured CDP port for this run
+- `--readonly`: block write commands (send/draft/delete)
 
 ### Browser Management
 
@@ -119,8 +148,10 @@ cli-365 mail view <message-id>
 cli-365 mail view --index 3
 cli-365 mail view #3
 
-# Get a thread/conversation
+# Get a thread/conversation (experimental)
 cli-365 mail thread get <conversation-id>
+cli-365 mail thread get --index 3
+cli-365 mail thread get --message-id <message-id>
 
 # Create a draft
 cli-365 mail draft create --to "user@example.com" --subject "Hello" --body "Message body"
@@ -157,11 +188,13 @@ Notes:
 - `--from`, `--to`, `--cc`, `--bcc`, `--subject`, `--since`, `--after`, `--before`, `--has-attachments`, `--unread`, `--is-read` compile into the query string used by Outlook search.
 - Dates accept `YYYY-MM-DD` or RFC3339. RFC3339 values preserve time granularity in the query.
 - `--query` passes a raw query string and skips auto-escaping/assembly.
+- `--limit` can appear after the query; other search flags should appear before the query (or use `--query`).
+- Last search results are cached at `~/.local/state/cli-365/last_search.json` and power `--index` / `#N` shortcuts for `mail view` and `mail reply`.
 - For `mail reply`, flags can appear after the message ID; you can also pass the body as the second positional argument.
 
 ### JSON Output
 
-Add `--json` flag to any command for JSON output:
+Add `--json` (global) to any command for JSON output:
 
 ```bash
 cli-365 --json mail search "invoice"
@@ -234,12 +267,26 @@ cli-365 debug capture --all-pages --netlog ./owa-capture.json
 cli-365 debug capture --all-targets --netlog ./owa-capture.json
 ```
 
+## Troubleshooting
+
+- **Browser window not showing**: ensure a GUI is available and export `DISPLAY`/`XAUTHORITY` (e.g. `DISPLAY=:1 XAUTHORITY=$HOME/.Xauthority`).
+- **401 Unauthorized**: run `cli-365 auth login` or `cli-365 --ensure-cdp auth login` to refresh tokens.
+- **500 OwaSerializationException**: capture a netlog (`cli-365 debug capture --netlog ...`) and re-run after login.
+- **Stale CDP**: use `--ensure-cdp` and/or set `--cdp-port` to a known port.
+
+## Known Issues
+
+- `mail thread get` is experimental and may return `message not found`.
+- `mail draft send` can fail with 404 (SendItem endpoint variance).
+- `mail draft delete` can fail with 500.
+- `mail attachments download` can fail with 500 on some accounts.
+
 ## How It Works
 
 1. **Browser Session**: The CLI manages a Chromium browser instance using rod (Go CDP client)
 2. **OWA Authentication**: Uses the standard Microsoft login flow through the browser
-3. **Token Discovery**: Extracts X-OWA-CANARY token from cookies/page state
-4. **API Calls**: Makes OWA service API calls via in-page fetch() to use the authenticated session
+3. **Token Discovery**: Extracts X-OWA-CANARY and bearer tokens from cookies/page state
+4. **API Calls**: Uses OWA service API calls; conversation fallback may query Graph/Substrate (experimental)
 
 ## Architecture
 
