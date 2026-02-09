@@ -31,10 +31,10 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 		canary, _ = getCanaryFromStartupData(page)
 	}
 
-	// Get bearer token from localStorage
-	bearer, _ := getBearerFromStorage(page)
+	// Get bearer tokens from storage
+	bearers, _ := getBearerTokensFromStorage(page)
 
-	if canary == "" && bearer == "" {
+	if canary == "" && bearers.OWA == "" {
 		return nil, errors.New("canary token not found - are you logged in?")
 	}
 
@@ -48,7 +48,9 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 
 	tokens := &Tokens{
 		Canary:      canary,
-		Bearer:      bearer,
+		Bearer:      bearers.OWA,
+		GraphBearer: bearers.Graph,
+		Substrate:   bearers.Substrate,
 		UserEmail:   userEmail,
 		Session:     session,
 		ExtractedAt: time.Now(),
@@ -303,12 +305,26 @@ func getCanaryFromPage(page *rod.Page) (string, error) {
 	return result.Value.Str(), nil
 }
 
-// getBearerFromStorage extracts bearer token from localStorage.
+type bearerTokens struct {
+	OWA       string `json:"owa"`
+	Graph     string `json:"graph"`
+	Substrate string `json:"substrate"`
+}
+
+// getBearerFromStorage extracts the OWA bearer token from storage.
 func getBearerFromStorage(page *rod.Page) (string, error) {
+	tokens, err := getBearerTokensFromStorage(page)
+	if err != nil {
+		return "", err
+	}
+	return tokens.OWA, nil
+}
+
+// getBearerTokensFromStorage extracts bearer tokens for OWA, Graph, and Substrate.
+func getBearerTokensFromStorage(page *rod.Page) (bearerTokens, error) {
+	var empty bearerTokens
 	result, err := page.Eval(`() => {
 		const tokens = [];
-		const matchesTarget = (key) =>
-			/https:\/\/outlook\.office\.com|https:\/\/outlook\.cloud\.microsoft/i.test(key);
 		const decodeJwt = (token) => {
 			try {
 				const parts = token.split(".");
@@ -321,18 +337,45 @@ func getBearerFromStorage(page *rod.Page) (string, error) {
 			}
 		};
 
-		const scoreToken = (aud) => {
-			if (!aud || typeof aud !== "string") return 0;
+		const scoreAud = (aud) => {
+			if (!aud) return 0;
+			if (Array.isArray(aud)) {
+				return aud.reduce((max, item) => Math.max(max, scoreAud(item)), 0);
+			}
+			if (typeof aud !== "string") return 0;
 			if (aud === "https://outlook.office.com") return 3;
 			if (aud.includes("https://outlook.office.com") && !aud.includes("/search")) return 2;
 			if (aud.includes("https://outlook.office.com")) return 1;
 			return 0;
 		};
 
+		const matchAud = (aud, target) => {
+			if (!aud || !target) return false;
+			if (Array.isArray(aud)) {
+				return aud.some((item) => matchAud(item, target));
+			}
+			if (typeof aud !== "string") return false;
+			if (aud === target) return true;
+			return aud.includes(target);
+		};
+
+		const pickToken = (predicate, scoreFn) => {
+			let best = null;
+			let bestScore = -1;
+			for (const entry of tokens) {
+				if (!predicate(entry.aud)) continue;
+				const score = scoreFn ? scoreFn(entry.aud) : 1;
+				if (score > bestScore) {
+					bestScore = score;
+					best = entry.token;
+				}
+			}
+			return best;
+		};
+
 		// Check localStorage
 		for (const key of Object.keys(localStorage || {})) {
 			if (!/accesstoken/i.test(key)) continue;
-			if (!matchesTarget(key)) continue;
 			const raw = localStorage.getItem(key);
 			if (!raw) continue;
 			try {
@@ -365,18 +408,26 @@ func getBearerFromStorage(page *rod.Page) (string, error) {
 		}
 
 		if (!tokens.length) return null;
-		tokens.sort((a, b) => scoreToken(b.aud) - scoreToken(a.aud));
-		return tokens[0].token || null;
+		return {
+			owa: pickToken((aud) => matchAud(aud, "https://outlook.office.com"), scoreAud),
+			graph: pickToken((aud) => matchAud(aud, "https://graph.microsoft.com")),
+			substrate: pickToken((aud) => matchAud(aud, "https://substrate.office.com")),
+		};
 	}`)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 
 	if result.Value.Nil() {
-		return "", nil
+		return empty, nil
 	}
 
-	return result.Value.Str(), nil
+	var out bearerTokens
+	if err := json.Unmarshal([]byte(result.Value.JSON("", "")), &out); err != nil {
+		return empty, err
+	}
+
+	return out, nil
 }
 
 // getUserEmailFromPage extracts the current user's email from page state.

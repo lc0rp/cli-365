@@ -6,6 +6,7 @@ A command-line interface for Outlook Web App (OWA) using browser automation. Thi
 
 - **Browser-based authentication**: Uses your existing OWA session, no OAuth app registration needed
 - **Mail operations**: Search, view, reply, drafts, attachments (thread view is experimental)
+- **Calendar operations**: List, get, create, update, delete events
 - **Persistent sessions**: Browser profile persists between runs for seamless auth
 - **JSON output**: All commands support `--json` (global) for scripting
 
@@ -40,14 +41,16 @@ auth:
   readonly: false    # Global readonly mode
   scopes: ["mail.readwrite", "mail.send"]
 security:
-  allowlist: ["mail", "auth", "browser"]  # Commands allowed (empty = all)
+  allowlist: ["mail", "calendar", "auth", "browser"]  # Commands allowed (empty = all)
   keyring: "os"      # Token storage: os | encrypted-file | plain
 ```
 
 ## Quickstart
 
+Note: on devbox, prepend `DISPLAY=:1 XAUTHORITY=$HOME/.Xauthority` to commands to enable GUI.
+
 ```bash
-# Start or connect to a managed browser and wait for login
+# Start or connect to a managed browser and wait for login 
 cli-365 --ensure-cdp --cdp-port 9222 auth login
 
 # Search your inbox
@@ -189,8 +192,34 @@ Notes:
 - Dates accept `YYYY-MM-DD` or RFC3339. RFC3339 values preserve time granularity in the query.
 - `--query` passes a raw query string and skips auto-escaping/assembly.
 - `--limit` can appear after the query; other search flags should appear before the query (or use `--query`).
-- Last search results are cached at `~/.local/state/cli-365/last_search.json` and power `--index` / `#N` shortcuts for `mail view` and `mail reply`.
+- Last search results are cached at `~/.local/state/cli-365/last_search.json` and power `--index` / `#N` shortcuts for `mail view`, `mail reply`, and `mail thread get`.
 - For `mail reply`, flags can appear after the message ID; you can also pass the body as the second positional argument.
+
+### Calendar Operations
+
+```bash
+# List events (defaults to now → 7 days)
+cli-365 calendar list
+
+# List events in a range
+cli-365 calendar list --start 2026-01-01 --end 2026-01-07
+
+# Get a single event
+cli-365 calendar get <event-id>
+
+# Create an event
+cli-365 calendar create --subject "Standup" --start 2026-01-02T09:00:00-05:00 --end 2026-01-02T09:15:00-05:00 --location "Zoom" --attendee "alice@example.com"
+
+# Update an event
+cli-365 calendar update <event-id> --subject "Updated" --start 2026-01-02T10:00:00-05:00 --end 2026-01-02T10:30:00-05:00
+
+# Delete an event
+cli-365 calendar delete <event-id>
+```
+
+Notes:
+- `calendar list` defaults to now → 7 days if `--start` is omitted.
+- Use `--attendee` and `--optional-attendee` multiple times to add attendees.
 
 ### JSON Output
 
@@ -303,6 +332,7 @@ internal/
 │   ├── client.go        # OWA client wrapper
 │   ├── discovery.go     # Token extraction
 │   ├── fetch.go         # In-page API calls
+│   ├── calendar.go      # Calendar operations
 │   ├── mail.go          # Mail operations
 │   └── models.go        # Data models
 └── paths/

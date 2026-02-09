@@ -37,14 +37,18 @@ func fetchConversationMessagesViaGraph(page *rod.Page, tokens *Tokens, conversat
 	if tokens == nil {
 		return nil, errors.New("tokens are nil")
 	}
-	if tokens.Bearer == "" {
+	bearer := tokens.GraphBearer
+	if bearer == "" {
+		bearer = tokens.Bearer
+	}
+	if bearer == "" {
 		return nil, errors.New("missing bearer token")
 	}
 	endpoint, err := buildGraphConversationURL(conversationID, maxResults)
 	if err != nil {
 		return nil, err
 	}
-	return fetchGraphConversationMessagesHTTP(endpoint, tokens.Bearer)
+	return fetchGraphConversationMessagesHTTP(endpoint, bearer)
 }
 
 func fetchConversationMessageIDsHTTP(endpoint string, bearer string) ([]string, error) {

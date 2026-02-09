@@ -37,7 +37,7 @@ func TestBuildGetItemRequest(t *testing.T) {
 }
 
 func TestBuildGetConversationItemsRequest(t *testing.T) {
-	req, err := buildGetConversationItemsRequest("conv-1", "")
+	req, err := buildGetConversationItemsRequest("conv-1", "", nil)
 	if err != nil {
 		t.Fatalf("buildGetConversationItemsRequest error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestBuildGetConversationItemsRequest(t *testing.T) {
 }
 
 func TestBuildGetConversationItemsRequestWithFolder(t *testing.T) {
-	req, err := buildGetConversationItemsRequest("conv-1", "folder-1")
+	req, err := buildGetConversationItemsRequest("conv-1", "folder-1", nil)
 	if err != nil {
 		t.Fatalf("buildGetConversationItemsRequest error: %v", err)
 	}
@@ -68,6 +68,19 @@ func TestBuildGetConversationItemsRequestWithFolder(t *testing.T) {
 	parent := convs[0]["ParentFolderId"].(map[string]interface{})
 	if parent["Id"] != "folder-1" {
 		t.Fatalf("ParentFolderId = %v", parent["Id"])
+	}
+}
+
+func TestBuildGetConversationItemsRequestMailboxInfo(t *testing.T) {
+	tokens := &Tokens{UserEmail: "user@example.com"}
+	req, err := buildGetConversationItemsRequest("conv-1", "", tokens)
+	if err != nil {
+		t.Fatalf("buildGetConversationItemsRequest error: %v", err)
+	}
+	body := req["Body"].(map[string]interface{})
+	mailbox := body["MailboxInfo"].(map[string]interface{})
+	if mailbox["mailboxSmtpAddress"] != "user@example.com" {
+		t.Fatalf("mailboxSmtpAddress = %v", mailbox["mailboxSmtpAddress"])
 	}
 }
 

@@ -30,6 +30,8 @@ type Client struct {
 type Tokens struct {
 	Canary      string            `json:"canary"`
 	Bearer      string            `json:"bearer,omitempty"`
+	GraphBearer string            `json:"graph_bearer,omitempty"`
+	Substrate   string            `json:"substrate_bearer,omitempty"`
 	UserEmail   string            `json:"user_email,omitempty"`
 	Session     SessionHeaders    `json:"session,omitempty"`
 	Folders     map[string]string `json:"folders,omitempty"`
@@ -50,6 +52,12 @@ func MergeTokens(dst, src *Tokens) *Tokens {
 	}
 	if src.Bearer != "" {
 		dst.Bearer = src.Bearer
+	}
+	if src.GraphBearer != "" {
+		dst.GraphBearer = src.GraphBearer
+	}
+	if src.Substrate != "" {
+		dst.Substrate = src.Substrate
 	}
 	if src.UserEmail != "" {
 		dst.UserEmail = src.UserEmail
@@ -186,27 +194,37 @@ func SaveTokens(t *Tokens) error {
 func LoadOrDiscoverTokens(page *rod.Page) (*Tokens, error) {
 	tokens, err := LoadTokens()
 	if err == nil && tokens != nil && tokens.Canary != "" {
-		if page != nil && tokens.Bearer == "" {
-			if bearer, err := getBearerFromStorage(page); err == nil && bearer != "" {
-				tokens.Bearer = bearer
-				_ = SaveTokens(tokens)
+		if page != nil {
+			updated := false
+			if bearerTokens, err := getBearerTokensFromStorage(page); err == nil {
+				if bearerTokens.OWA != "" && bearerTokens.OWA != tokens.Bearer {
+					tokens.Bearer = bearerTokens.OWA
+					updated = true
+				}
+				if bearerTokens.Graph != "" && bearerTokens.Graph != tokens.GraphBearer {
+					tokens.GraphBearer = bearerTokens.Graph
+					updated = true
+				}
+				if bearerTokens.Substrate != "" && bearerTokens.Substrate != tokens.Substrate {
+					tokens.Substrate = bearerTokens.Substrate
+					updated = true
+				}
 			}
-		}
-		if page != nil && tokens.UserEmail == "" {
-			if email, err := getUserEmailFromPage(page); err == nil && email != "" {
+			if email, err := getUserEmailFromPage(page); err == nil && email != "" && email != tokens.UserEmail {
 				tokens.UserEmail = email
-				_ = SaveTokens(tokens)
+				updated = true
 			}
-		}
-		if page != nil && tokens.Session.IsZero() {
 			if session, err := getSessionHeadersFromPage(page); err == nil {
 				if session.AnchorMailbox == "" && tokens.UserEmail != "" {
 					session.AnchorMailbox = tokens.UserEmail
 				}
 				if !session.IsZero() {
 					tokens.Session = MergeSessionHeaders(tokens.Session, session)
-					_ = SaveTokens(tokens)
+					updated = true
 				}
+			}
+			if updated {
+				_ = SaveTokens(tokens)
 			}
 		}
 		return tokens, nil

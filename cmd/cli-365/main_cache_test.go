@@ -25,8 +25,8 @@ func TestCachedSearchRoundTrip(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	result := &owa.SearchResult{
 		Messages: []owa.Message{
-			{ID: "id-1", Subject: "One", From: &owa.EmailAddress{Address: "a@example.com"}},
-			{ID: "id-2", Subject: "Two", From: &owa.EmailAddress{Name: "Bob", Address: "b@example.com"}},
+			{ID: "id-1", ConversationID: "conv-1", ParentFolderId: "folder-1", Subject: "One", From: &owa.EmailAddress{Address: "a@example.com"}},
+			{ID: "id-2", ConversationID: "conv-2", ParentFolderId: "folder-2", Subject: "Two", From: &owa.EmailAddress{Name: "Bob", Address: "b@example.com"}},
 		},
 	}
 	if err := saveLastSearch("test", result); err != nil {
@@ -42,6 +42,16 @@ func TestCachedSearchRoundTrip(t *testing.T) {
 	}
 	if id != "id-2" {
 		t.Fatalf("id = %q, want id-2", id)
+	}
+	msg, err := resolveCachedMessage(1)
+	if err != nil {
+		t.Fatalf("resolveCachedMessage error: %v", err)
+	}
+	if msg.ConversationID != "conv-1" {
+		t.Fatalf("ConversationID = %q, want conv-1", msg.ConversationID)
+	}
+	if msg.ParentFolderID != "folder-1" {
+		t.Fatalf("ParentFolderID = %q, want folder-1", msg.ParentFolderID)
 	}
 	if filepath.Dir(path) == "" {
 		t.Fatalf("cache path should include directory")

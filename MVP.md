@@ -10,7 +10,7 @@ Legend: ✅ working | ⚠️ partial | ❌ failing | ⏳ not tested
 | Search (filters: from/since/etc) | ✅ | `--from`, `--since` works |
 | Search limit | ✅ | `--limit` respected even after query |
 | View message | ✅ | `mail view --index` works |
-| Thread get | ❌ | `mail thread get --index` fails (message not found) |
+| Thread get | ⏳ | Cache now stores conversation IDs; rerun search and verify |
 | Reply | ✅ | `mail reply` works (Send via CreateItem) |
 | Send (direct) | ✅ | `mail send` works after payload update |
 | Draft create | ✅ | `mail draft create` works |
@@ -19,3 +19,15 @@ Legend: ✅ working | ⚠️ partial | ❌ failing | ⏳ not tested
 | Draft delete | ❌ | `mail draft delete` returns 500 |
 | Attachments list | ✅ | `mail attachments list` works |
 | Attachments download | ❌ | `mail attachments download` returns 500 |
+
+## Calendar
+
+Legend: ✅ working | ⚠️ partial | ❌ failing | ⏳ not tested
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| List events | ⏳ | Needs verification |
+| Get event | ⏳ | Needs verification |
+| Create event | ⏳ | Needs verification |
+| Update event | ⏳ | Needs verification |
+| Delete event | ⏳ | Needs verification |

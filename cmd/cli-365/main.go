@@ -59,6 +59,7 @@ func main() {
 			authCommand(),
 			browserCommand(),
 			mailCommand(),
+			calendarCommand(),
 			debugCommand(),
 		},
 	}
@@ -726,11 +727,11 @@ func mailCommand() *cli.Command {
 						}
 					}
 					if index > 0 {
-						resolved, err := resolveCachedMessageID(index)
+						cached, err := resolveCachedMessage(index)
 						if err != nil {
 							return err
 						}
-						messageID = resolved
+						messageID = cached.ID
 					} else if len(args) > 0 {
 						messageID = args[0]
 					}
@@ -808,6 +809,8 @@ func mailCommand() *cli.Command {
 							args := c.Args().Slice()
 							index := c.Int("index")
 							messageID := strings.TrimSpace(c.String("message-id"))
+							convID := ""
+							folderID := ""
 							if index == 0 && len(args) > 0 && strings.HasPrefix(args[0], "#") {
 								if parsed, err := parseIndexArg(args[0]); err == nil {
 									index = parsed
@@ -815,21 +818,27 @@ func mailCommand() *cli.Command {
 								}
 							}
 							if index > 0 {
-								resolved, err := resolveCachedMessageID(index)
+								cached, err := resolveCachedMessage(index)
 								if err != nil {
 									return err
 								}
-								messageID = resolved
+								messageID = cached.ID
+								if cached.ConversationID != "" {
+									convID = cached.ConversationID
+								}
+								if cached.ParentFolderID != "" {
+									folderID = cached.ParentFolderID
+								}
 							}
-							convID := ""
-							folderID := ""
 							if messageID != "" {
-								msg, err := owa.GetMessage(client.Page(), client.Tokens(), messageID)
-								if err != nil {
-									return err
+								if convID == "" {
+									msg, err := owa.GetMessage(client.Page(), client.Tokens(), messageID)
+									if err != nil {
+										return err
+									}
+									convID = msg.ConversationID
+									folderID = msg.ParentFolderId
 								}
-								convID = msg.ConversationID
-								folderID = msg.ParentFolderId
 							} else if len(args) > 0 {
 								convID = args[0]
 							}
@@ -1094,11 +1103,11 @@ func mailCommand() *cli.Command {
 						}
 					}
 					if index > 0 {
-						resolved, err := resolveCachedMessageID(index)
+						cached, err := resolveCachedMessage(index)
 						if err != nil {
 							return err
 						}
-						messageID = resolved
+						messageID = cached.ID
 					} else if len(args) > 0 {
 						messageID = args[0]
 					}
@@ -1236,9 +1245,11 @@ type cachedSearch struct {
 }
 
 type cachedMessage struct {
-	ID      string `json:"id"`
-	From    string `json:"from,omitempty"`
-	Subject string `json:"subject,omitempty"`
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	ParentFolderID string `json:"parent_folder_id,omitempty"`
+	From           string `json:"from,omitempty"`
+	Subject        string `json:"subject,omitempty"`
 }
 
 func saveLastSearch(query string, result *owa.SearchResult) error {
@@ -1261,9 +1272,11 @@ func saveLastSearch(query string, result *owa.SearchResult) error {
 			}
 		}
 		cache.Messages = append(cache.Messages, cachedMessage{
-			ID:      msg.ID,
-			From:    from,
-			Subject: msg.Subject,
+			ID:             msg.ID,
+			ConversationID: msg.ConversationID,
+			ParentFolderID: msg.ParentFolderId,
+			From:           from,
+			Subject:        msg.Subject,
 		})
 	}
 	path := lastSearchPath()
@@ -1277,26 +1290,40 @@ func saveLastSearch(query string, result *owa.SearchResult) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-func resolveCachedMessageID(index int) (string, error) {
+func resolveCachedMessage(index int) (cachedMessage, error) {
 	if index <= 0 {
-		return "", fmt.Errorf("index must be >= 1")
+		return cachedMessage{}, fmt.Errorf("index must be >= 1")
 	}
 	path := lastSearchPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("load cached search: %w", err)
+		return cachedMessage{}, fmt.Errorf("load cached search: %w", err)
 	}
 	var cache cachedSearch
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return "", fmt.Errorf("parse cached search: %w", err)
+		return cachedMessage{}, fmt.Errorf("parse cached search: %w", err)
 	}
 	if len(cache.Messages) == 0 {
-		return "", fmt.Errorf("cached search has no messages")
+		return cachedMessage{}, fmt.Errorf("cached search has no messages")
 	}
 	if index > len(cache.Messages) {
-		return "", fmt.Errorf("index out of range: %d (max %d)", index, len(cache.Messages))
+		return cachedMessage{}, fmt.Errorf("index out of range: %d (max %d)", index, len(cache.Messages))
 	}
-	return cache.Messages[index-1].ID, nil
+	return cache.Messages[index-1], nil
+}
+
+func resolveCachedMessageID(index int) (string, error) {
+	if index <= 0 {
+		return "", fmt.Errorf("index must be >= 1")
+	}
+	msg, err := resolveCachedMessage(index)
+	if err != nil {
+		return "", err
+	}
+	if msg.ID == "" {
+		return "", fmt.Errorf("cached message missing ID")
+	}
+	return msg.ID, nil
 }
 
 func parseIndexArg(raw string) (int, error) {

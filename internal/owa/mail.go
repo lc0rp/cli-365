@@ -91,6 +91,7 @@ func buildSearchMessagesBody(query string, folderID string, maxResults int) map[
 			"BaseShape": "IdOnly",
 			"AdditionalProperties": []map[string]interface{}{
 				{"FieldURI": "item:Subject"},
+				{"FieldURI": "item:ConversationId"},
 				{"FieldURI": "item:DateTimeReceived"},
 				{"FieldURI": "item:DateTimeSent"},
 				{"FieldURI": "message:From"},
@@ -99,6 +100,7 @@ func buildSearchMessagesBody(query string, folderID string, maxResults int) map[
 				{"FieldURI": "item:Importance"},
 				{"FieldURI": "message:IsRead"},
 				{"FieldURI": "item:Preview"},
+				{"FieldURI": "item:ParentFolderId"},
 			},
 		},
 		"Paging": map[string]interface{}{
@@ -229,6 +231,8 @@ func normalizeFolderName(raw string) (string, bool) {
 		return "archive", true
 	case "outbox":
 		return "outbox", true
+	case "calendar", "cal":
+		return "calendar", true
 	default:
 		return "", false
 	}
@@ -329,7 +333,7 @@ func GetMessage(page *rod.Page, tokens *Tokens, messageID string) (*Message, err
 
 // GetConversation retrieves all messages in a conversation.
 func GetConversation(page *rod.Page, tokens *Tokens, conversationID string, folderID string) (*Conversation, error) {
-	reqBody, err := buildGetConversationItemsRequest(conversationID, folderID)
+	reqBody, err := buildGetConversationItemsRequest(conversationID, folderID, tokens)
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +731,7 @@ func buildGetItemRequest(messageID string) (map[string]interface{}, error) {
 	return req, nil
 }
 
-func buildGetConversationItemsRequest(conversationID string, folderID string) (map[string]interface{}, error) {
+func buildGetConversationItemsRequest(conversationID string, folderID string, tokens *Tokens) (map[string]interface{}, error) {
 	if strings.TrimSpace(conversationID) == "" {
 		return nil, errors.New("conversation ID required")
 	}
@@ -758,6 +762,11 @@ func buildGetConversationItemsRequest(conversationID string, folderID string) (m
 			},
 		},
 		"Conversations": []map[string]interface{}{conversation},
+	}
+	if tokens != nil {
+		if mailbox := buildMailboxInfo(tokens); mailbox != nil {
+			body["MailboxInfo"] = mailbox
+		}
 	}
 	if folderID != "" {
 		body["FoldersToIgnore"] = []map[string]interface{}{}

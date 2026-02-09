@@ -63,14 +63,21 @@ func fetchConversationMessagesViaSubstrate(page *rod.Page, tokens *Tokens, conve
 	if tokens == nil {
 		return nil, errors.New("tokens are nil")
 	}
-	if tokens.Bearer == "" {
+	bearer := tokens.Substrate
+	if bearer == "" {
+		bearer = tokens.GraphBearer
+	}
+	if bearer == "" {
+		bearer = tokens.Bearer
+	}
+	if bearer == "" {
 		return nil, errors.New("missing bearer token")
 	}
 	endpoint, err := buildSubstrateConversationURL(conversationID, maxResults)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := fetchConversationMessageIDsHTTP(endpoint, tokens.Bearer)
+	ids, err := fetchConversationMessageIDsHTTP(endpoint, bearer)
 	if err != nil {
 		return nil, err
 	}

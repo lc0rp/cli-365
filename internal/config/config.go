@@ -51,7 +51,7 @@ func Default() Config {
 			Scopes:      []string{"mail.readwrite", "mail.send"},
 		},
 		Security: SecurityConfig{
-			Allowlist: []string{"mail", "auth", "browser"},
+			Allowlist: []string{"mail", "calendar", "auth", "browser"},
 			Keyring:   "os",
 		},
 	}

@@ -89,6 +89,17 @@ func TestBuildSearchMessagesBody(t *testing.T) {
 			if len(props) < 5 {
 				t.Errorf("AdditionalProperties has %d items, want at least 5", len(props))
 			}
+			found := map[string]bool{}
+			for _, prop := range props {
+				if field, ok := prop["FieldURI"].(string); ok {
+					found[field] = true
+				}
+			}
+			for _, field := range []string{"item:ConversationId", "item:ParentFolderId"} {
+				if !found[field] {
+					t.Errorf("missing AdditionalProperties field %s", field)
+				}
+			}
 
 			// Check paging
 			paging, ok := body["Paging"].(map[string]interface{})

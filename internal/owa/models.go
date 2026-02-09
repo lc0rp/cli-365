@@ -165,6 +165,135 @@ func (a *Attachment) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// CalendarLocation represents a calendar location.
+type CalendarLocation struct {
+	DisplayName string `json:"DisplayName,omitempty"`
+}
+
+// UnmarshalJSON supports Location as string or object.
+func (l *CalendarLocation) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		l.DisplayName = str
+		return nil
+	}
+	var obj struct {
+		DisplayName string `json:"DisplayName"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	l.DisplayName = obj.DisplayName
+	return nil
+}
+
+// CalendarOrganizer represents the meeting organizer.
+type CalendarOrganizer struct {
+	Mailbox EmailAddress `json:"Mailbox,omitempty"`
+}
+
+// Attendee represents a calendar attendee.
+type Attendee struct {
+	Mailbox      EmailAddress    `json:"Mailbox,omitempty"`
+	ResponseType string          `json:"ResponseType,omitempty"`
+	Status       *AttendeeStatus `json:"Status,omitempty"`
+}
+
+// AttendeeStatus represents attendee response status.
+type AttendeeStatus struct {
+	ResponseType string `json:"ResponseType,omitempty"`
+	Time         string `json:"Time,omitempty"`
+}
+
+// CalendarEvent represents a calendar event.
+type CalendarEvent struct {
+	ID                   string             `json:"ItemId,omitempty"`
+	ChangeKey            string             `json:"ChangeKey,omitempty"`
+	Subject              string             `json:"Subject,omitempty"`
+	Body                 *MessageBody       `json:"Body,omitempty"`
+	Start                string             `json:"Start,omitempty"`
+	End                  string             `json:"End,omitempty"`
+	IsAllDayEvent        bool               `json:"IsAllDayEvent,omitempty"`
+	Location             *CalendarLocation  `json:"Location,omitempty"`
+	Organizer            *CalendarOrganizer `json:"Organizer,omitempty"`
+	RequiredAttendees    []Attendee         `json:"RequiredAttendees,omitempty"`
+	OptionalAttendees    []Attendee         `json:"OptionalAttendees,omitempty"`
+	LegacyFreeBusyStatus string             `json:"LegacyFreeBusyStatus,omitempty"`
+	IsCancelled          bool               `json:"IsCancelled,omitempty"`
+	IsOrganizer          bool               `json:"IsOrganizer,omitempty"`
+	Importance           string             `json:"Importance,omitempty"`
+	Sensitivity          string             `json:"Sensitivity,omitempty"`
+	Categories           []string           `json:"Categories,omitempty"`
+	DateTimeCreated      string             `json:"DateTimeCreated,omitempty"`
+	LastModifiedTime     string             `json:"LastModifiedTime,omitempty"`
+}
+
+// UnmarshalJSON supports ItemId as string or {Id, ChangeKey}.
+func (e *CalendarEvent) UnmarshalJSON(data []byte) error {
+	type Alias CalendarEvent
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var id string
+	var changeKey string
+	if v, ok := raw["ItemId"]; ok {
+		if err := json.Unmarshal(v, &id); err != nil {
+			var item ItemID
+			if err := json.Unmarshal(v, &item); err == nil {
+				id = item.ID
+				changeKey = item.ChangeKey
+			}
+		}
+		delete(raw, "ItemId")
+	}
+	if v, ok := raw["ChangeKey"]; ok {
+		var ck string
+		if err := json.Unmarshal(v, &ck); err == nil && ck != "" {
+			changeKey = ck
+		}
+		delete(raw, "ChangeKey")
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*e = CalendarEvent(alias)
+	if id != "" {
+		e.ID = id
+	}
+	if changeKey != "" {
+		e.ChangeKey = changeKey
+	}
+	return nil
+}
+
+// CalendarEventDraft represents a new calendar event.
+type CalendarEventDraft struct {
+	Subject           string         `json:"Subject,omitempty"`
+	Body              *MessageBody   `json:"Body,omitempty"`
+	Start             string         `json:"Start,omitempty"`
+	End               string         `json:"End,omitempty"`
+	IsAllDayEvent     bool           `json:"IsAllDayEvent,omitempty"`
+	Location          string         `json:"Location,omitempty"`
+	RequiredAttendees []EmailAddress `json:"RequiredAttendees,omitempty"`
+	OptionalAttendees []EmailAddress `json:"OptionalAttendees,omitempty"`
+}
+
+// CalendarEventUpdate represents updates for a calendar event.
+type CalendarEventUpdate struct {
+	Subject       *string      `json:"Subject,omitempty"`
+	Body          *MessageBody `json:"Body,omitempty"`
+	Start         *string      `json:"Start,omitempty"`
+	End           *string      `json:"End,omitempty"`
+	IsAllDayEvent *bool        `json:"IsAllDayEvent,omitempty"`
+	Location      *string      `json:"Location,omitempty"`
+}
+
 // Conversation represents an email conversation/thread.
 type Conversation struct {
 	ID                 string    `json:"ConversationId,omitempty"`
