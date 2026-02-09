@@ -57,6 +57,33 @@ func TestBuildCalendarViewRequest(t *testing.T) {
 	}
 }
 
+func TestBuildCalendarViewJsonRequest(t *testing.T) {
+	req, err := buildCalendarViewJsonRequest("2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z", 10, "")
+	if err != nil {
+		t.Fatalf("buildCalendarViewJsonRequest: %v", err)
+	}
+	if req["__type"] != "FindItemJsonRequest:#Exchange" {
+		t.Fatalf("unexpected type: %v", req["__type"])
+	}
+	if req["Header"] == nil {
+		t.Fatalf("Header missing")
+	}
+	if req["Body"] == nil {
+		t.Fatalf("Body missing")
+	}
+}
+
+func TestShouldRetryCalendarView(t *testing.T) {
+	resp := &FetchResponse{Status: 500, Body: json.RawMessage(`{"Body":{"ExceptionName":"OwaSerializationException","MessageText":"oops"}}`)}
+	if !shouldRetryCalendarView(resp) {
+		t.Fatalf("expected retry for serialization exception")
+	}
+	resp = &FetchResponse{Status: 400, Body: json.RawMessage(`{"Body":{"ExceptionName":"OtherException"}}`)}
+	if shouldRetryCalendarView(resp) {
+		t.Fatalf("unexpected retry for non-500 response")
+	}
+}
+
 func TestBuildCreateCalendarEventRequest(t *testing.T) {
 	if _, err := buildCreateCalendarEventRequest(nil); err == nil {
 		t.Fatalf("expected error for nil draft")

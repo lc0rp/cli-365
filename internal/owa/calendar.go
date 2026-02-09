@@ -26,7 +26,7 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 	}
 	folderID = resolved
 
-	body, err := buildCalendarViewRequest(start, end, maxResults, folderID)
+	body, err := buildCalendarViewJsonRequest(start, end, maxResults, folderID)
 	if err != nil {
 		return nil, err
 	}
@@ -34,6 +34,15 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 	resp, err := CallOWAAction(page, tokens, "FindItem", body)
 	if err != nil {
 		return nil, err
+	}
+	if resp.Status != 200 && shouldRetryCalendarView(resp) {
+		fallback, ferr := buildCalendarViewRequest(start, end, maxResults, folderID)
+		if ferr != nil {
+			return nil, ferr
+		}
+		if retry, rerr := CallOWAAction(page, tokens, "FindItem", fallback); rerr == nil && retry != nil {
+			resp = retry
+		}
 	}
 	if resp.Status != 200 {
 		return nil, fmt.Errorf("calendar list failed with status %d: %s", resp.Status, formatOWAErrorDetails(resp))
@@ -190,6 +199,31 @@ func buildCalendarViewRequest(start string, end string, maxResults int, folderID
 	}
 
 	return body, nil
+}
+
+func buildCalendarViewJsonRequest(start string, end string, maxResults int, folderID string) (map[string]interface{}, error) {
+	body, err := buildCalendarViewRequest(start, end, maxResults, folderID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"__type": "FindItemJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body":   body,
+	}, nil
+}
+
+func shouldRetryCalendarView(resp *FetchResponse) bool {
+	if resp == nil || resp.Status != 500 {
+		return false
+	}
+	info := parseOWAError(resp.Body)
+	message := strings.ToLower(info.Message)
+	exception := strings.ToLower(info.Exception)
+	if strings.Contains(exception, "serialization") || strings.Contains(message, "serialization") {
+		return true
+	}
+	return len(info.Exception) == 0 && len(info.Message) == 0
 }
 
 func buildGetCalendarEventRequest(eventID string) (map[string]interface{}, error) {
