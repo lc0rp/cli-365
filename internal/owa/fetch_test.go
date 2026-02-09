@@ -51,6 +51,15 @@ func TestOWAEndpoint(t *testing.T) {
 	}
 }
 
+func TestOWAEndpointWithApp(t *testing.T) {
+	if got := OWAEndpointWithApp("FindItem", "Calendar"); got != "https://outlook.office.com/owa/0/service.svc?action=FindItem&app=Calendar&n=0" {
+		t.Fatalf("OWAEndpointWithApp(Calendar) = %q", got)
+	}
+	if got := OWAEndpointWithApp("FindItem", ""); got != "https://outlook.office.com/owa/0/service.svc?action=FindItem&app=Mail&n=0" {
+		t.Fatalf("OWAEndpointWithApp(empty) = %q", got)
+	}
+}
+
 func TestOWAEndpointForURL(t *testing.T) {
 	tests := []struct {
 		pageURL string
@@ -81,6 +90,14 @@ func TestOWAEndpointForURL(t *testing.T) {
 				t.Errorf("OWAEndpointForURL(%q) = %q, want %q", tt.pageURL, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestOWAEndpointForURLWithApp(t *testing.T) {
+	got := OWAEndpointForURLWithApp("https://outlook.cloud.microsoft/mail/", "FindItem", "Calendar")
+	want := "https://outlook.cloud.microsoft/owa/service.svc?action=FindItem&app=Calendar&n=0"
+	if got != want {
+		t.Fatalf("OWAEndpointForURLWithApp = %q, want %q", got, want)
 	}
 }
 

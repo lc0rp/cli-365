@@ -78,6 +78,10 @@ func TestShouldRetryCalendarView(t *testing.T) {
 	if !shouldRetryCalendarView(resp) {
 		t.Fatalf("expected retry for serialization exception")
 	}
+	resp = &FetchResponse{Status: 500, Body: json.RawMessage(`{"Body":{"ExceptionName":"MemberAccessException","ResponseCode":"ErrorInternalServerError"}}`)}
+	if !shouldRetryCalendarView(resp) {
+		t.Fatalf("expected retry for member access exception")
+	}
 	resp = &FetchResponse{Status: 400, Body: json.RawMessage(`{"Body":{"ExceptionName":"OtherException"}}`)}
 	if shouldRetryCalendarView(resp) {
 		t.Fatalf("unexpected retry for non-500 response")

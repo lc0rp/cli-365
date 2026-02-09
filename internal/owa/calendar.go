@@ -9,6 +9,8 @@ import (
 	"github.com/go-rod/rod"
 )
 
+var calendarActionOptions = OWAActionOptions{App: "Calendar", ReqSource: "Calendar"}
+
 // CalendarViewResult represents a calendar list response.
 type CalendarViewResult struct {
 	TotalCount int             `json:"TotalCount,omitempty"`
@@ -31,7 +33,7 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 		return nil, err
 	}
 
-	resp, err := CallOWAAction(page, tokens, "FindItem", body)
+	resp, err := CallOWAActionWithOptions(page, tokens, "FindItem", body, calendarActionOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +67,7 @@ func GetCalendarEvent(page *rod.Page, tokens *Tokens, eventID string) (*Calendar
 	if err != nil {
 		return nil, err
 	}
-	resp, err := CallOWAAction(page, tokens, "GetItem", reqBody)
+	resp, err := CallOWAActionWithOptions(page, tokens, "GetItem", reqBody, calendarActionOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +90,7 @@ func CreateCalendarEvent(page *rod.Page, tokens *Tokens, draft *CalendarEventDra
 	if err != nil {
 		return nil, err
 	}
-	resp, err := CallOWAAction(page, tokens, "CreateItem", reqBody)
+	resp, err := CallOWAActionWithOptions(page, tokens, "CreateItem", reqBody, calendarActionOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +113,7 @@ func UpdateCalendarEvent(page *rod.Page, tokens *Tokens, eventID string, update 
 	if err != nil {
 		return err
 	}
-	resp, err := CallOWAAction(page, tokens, "UpdateItem", reqBody)
+	resp, err := CallOWAActionWithOptions(page, tokens, "UpdateItem", reqBody, calendarActionOptions)
 	if err != nil {
 		return err
 	}
@@ -132,7 +134,7 @@ func DeleteCalendarEvent(page *rod.Page, tokens *Tokens, eventID string) error {
 		},
 		"DeleteType": "MoveToDeletedItems",
 	}
-	resp, err := CallOWAAction(page, tokens, "DeleteItem", body)
+	resp, err := CallOWAActionWithOptions(page, tokens, "DeleteItem", body, calendarActionOptions)
 	if err != nil {
 		return err
 	}
@@ -152,22 +154,29 @@ func buildCalendarViewRequest(start string, end string, maxResults int, folderID
 		maxResults = 50
 	}
 
+	property := func(uri string) map[string]interface{} {
+		return map[string]interface{}{
+			"__type":   "PropertyUri:#Exchange",
+			"FieldURI": uri,
+		}
+	}
+
 	body := map[string]interface{}{
 		"__type": "FindItemRequest:#Exchange",
 		"ItemShape": map[string]interface{}{
 			"BaseShape": "IdOnly",
 			"AdditionalProperties": []map[string]interface{}{
-				{"FieldURI": "item:Subject"},
-				{"FieldURI": "calendar:Start"},
-				{"FieldURI": "calendar:End"},
-				{"FieldURI": "calendar:IsAllDayEvent"},
-				{"FieldURI": "calendar:Location"},
-				{"FieldURI": "calendar:Organizer"},
-				{"FieldURI": "calendar:RequiredAttendees"},
-				{"FieldURI": "calendar:OptionalAttendees"},
-				{"FieldURI": "calendar:LegacyFreeBusyStatus"},
-				{"FieldURI": "calendar:IsCancelled"},
-				{"FieldURI": "calendar:IsOrganizer"},
+				property("item:Subject"),
+				property("calendar:Start"),
+				property("calendar:End"),
+				property("calendar:IsAllDayEvent"),
+				property("calendar:Location"),
+				property("calendar:Organizer"),
+				property("calendar:RequiredAttendees"),
+				property("calendar:OptionalAttendees"),
+				property("calendar:LegacyFreeBusyStatus"),
+				property("calendar:IsCancelled"),
+				property("calendar:IsOrganizer"),
 			},
 		},
 		"CalendarView": map[string]interface{}{
@@ -221,6 +230,9 @@ func shouldRetryCalendarView(resp *FetchResponse) bool {
 	message := strings.ToLower(info.Message)
 	exception := strings.ToLower(info.Exception)
 	if strings.Contains(exception, "serialization") || strings.Contains(message, "serialization") {
+		return true
+	}
+	if strings.Contains(exception, "memberaccess") || strings.Contains(message, "memberaccess") {
 		return true
 	}
 	return len(info.Exception) == 0 && len(info.Message) == 0

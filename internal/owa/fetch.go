@@ -157,8 +157,24 @@ func OWAEndpoint(action string) string {
 	return fmt.Sprintf("%s?action=%s&app=Mail&n=0", OWAAPIBase, action)
 }
 
+// OWAEndpointWithApp returns the full URL for an OWA service action for the given app.
+func OWAEndpointWithApp(action string, app string) string {
+	if strings.TrimSpace(app) == "" {
+		app = "Mail"
+	}
+	return fmt.Sprintf("%s?action=%s&app=%s&n=0", OWAAPIBase, action, app)
+}
+
 // OWAEndpointForURL returns the OWA endpoint for the given page URL.
 func OWAEndpointForURL(pageURL string, action string) string {
+	return OWAEndpointForURLWithApp(pageURL, action, "Mail")
+}
+
+// OWAEndpointForURLWithApp returns the OWA endpoint for the given page URL and app.
+func OWAEndpointForURLWithApp(pageURL string, action string, app string) string {
+	if strings.TrimSpace(app) == "" {
+		app = "Mail"
+	}
 	base := OWAAPIBase
 	if pageURL != "" {
 		if u, err := url.Parse(pageURL); err == nil && u.Scheme != "" && u.Host != "" {
@@ -177,39 +193,67 @@ func OWAEndpointForURL(pageURL string, action string) string {
 			}
 		}
 	}
-	return fmt.Sprintf("%s?action=%s&app=Mail&n=0", base, action)
+	return fmt.Sprintf("%s?action=%s&app=%s&n=0", base, action, app)
 }
 
 // OWAEndpointForPage returns the OWA endpoint for the current page.
 func OWAEndpointForPage(page *rod.Page, action string) string {
+	return OWAEndpointForPageWithApp(page, action, "Mail")
+}
+
+// OWAEndpointForPageWithApp returns the OWA endpoint for the current page and app.
+func OWAEndpointForPageWithApp(page *rod.Page, action string, app string) string {
 	if page == nil {
-		return OWAEndpoint(action)
+		return OWAEndpointWithApp(action, app)
 	}
 	info, err := page.Info()
 	if err != nil || info == nil {
-		return OWAEndpoint(action)
+		return OWAEndpointWithApp(action, app)
 	}
-	return OWAEndpointForURL(info.URL, action)
+	return OWAEndpointForURLWithApp(info.URL, action, app)
 }
 
 // CallOWAAction calls an OWA service action with proper formatting.
 func CallOWAAction(page *rod.Page, tokens *Tokens, action string, body interface{}) (*FetchResponse, error) {
+	return callOWAAction(page, tokens, action, body, "", "Mail")
+}
+
+type OWAActionOptions struct {
+	App       string
+	ReqSource string
+}
+
+func CallOWAActionWithSource(page *rod.Page, tokens *Tokens, action string, body interface{}, reqSource string) (*FetchResponse, error) {
+	return callOWAAction(page, tokens, action, body, "", reqSource)
+}
+
+func CallOWAActionWithOptions(page *rod.Page, tokens *Tokens, action string, body interface{}, opts OWAActionOptions) (*FetchResponse, error) {
+	endpoint := ""
+	if strings.TrimSpace(opts.App) != "" {
+		endpoint = OWAEndpointForPageWithApp(page, action, opts.App)
+	}
+	return callOWAAction(page, tokens, action, body, endpoint, opts.ReqSource)
+}
+
+func callOWAAction(page *rod.Page, tokens *Tokens, action string, body interface{}, endpoint string, reqSource string) (*FetchResponse, error) {
 	if tokens == nil {
 		return nil, fmt.Errorf("tokens are nil")
 	}
 	if err := SessionFeatures().Check(action); err != nil {
 		return nil, err
 	}
-	endpoint := OWAEndpointForPage(page, action)
-	resp, err := callOWAActionAt(page, tokens, action, body, endpoint)
+	if endpoint == "" {
+		endpoint = OWAEndpointForPage(page, action)
+	}
+	resp, err := callOWAActionAtWithSource(page, tokens, action, body, endpoint, reqSource)
 	if err == nil && resp != nil && resp.Status == 401 && page != nil {
 		if refreshed, rerr := refreshTokensFromPage(tokens, page); rerr == nil && refreshed != nil {
-			resp, err = callOWAActionAt(page, refreshed, action, body, endpoint)
+			resp, err = callOWAActionAtWithSource(page, refreshed, action, body, endpoint, reqSource)
 		}
 	}
 	if err == nil && resp != nil && resp.Status == 404 {
 		if alt := swapServiceSVCPath(endpoint); alt != "" && alt != endpoint {
-			if retry, rerr := callOWAActionAt(page, tokens, action, body, alt); rerr == nil && retry != nil {
+			if retry, rerr := callOWAActionAtWithSource(page, tokens, action, body, alt, reqSource); rerr == nil && retry != nil {
 				resp = retry
 				err = nil
 			}
@@ -219,10 +263,17 @@ func CallOWAAction(page *rod.Page, tokens *Tokens, action string, body interface
 }
 
 func callOWAActionAt(page *rod.Page, tokens *Tokens, action string, body interface{}, endpoint string) (*FetchResponse, error) {
+	return callOWAActionAtWithSource(page, tokens, action, body, endpoint, "Mail")
+}
+
+func callOWAActionAtWithSource(page *rod.Page, tokens *Tokens, action string, body interface{}, endpoint string, reqSource string) (*FetchResponse, error) {
 	fullBody := NewOWARequest(body)
 	payload := interface{}(fullBody)
 	if shouldUseRawBody(page) || isRawOWARequest(body) {
 		payload = body
+	}
+	if strings.TrimSpace(reqSource) == "" {
+		reqSource = "Mail"
 	}
 	req := FetchRequest{
 		URL:    endpoint,
@@ -234,7 +285,7 @@ func callOWAActionAt(page *rod.Page, tokens *Tokens, action string, body interfa
 			"Prefer":              "IdType=\"ImmutableId\"",
 			"X-OWA-CorrelationId": newCorrelationID(),
 			"X-OWA-Hosted-UX":     "false",
-			"X-Req-Source":        "Mail",
+			"X-Req-Source":        reqSource,
 		},
 		Body: payload,
 	}
