@@ -1,0 +1,77 @@
+package main
+
+import "testing"
+
+func TestBuildSearchQuery(t *testing.T) {
+	got, err := buildSearchQuery(
+		"alpha",
+		"alice@example.com",
+		"bob@example.com",
+		"carol@example.com",
+		"dave@example.com",
+		"report",
+		true,
+		true,
+		false,
+		"2026-01-01",
+		"2026-01-31",
+	)
+	if err != nil {
+		t.Fatalf("buildSearchQuery error: %v", err)
+	}
+	want := "alpha from:\"alice@example.com\" to:\"bob@example.com\" cc:\"carol@example.com\" bcc:\"dave@example.com\" subject:\"report\" hasattachment:true isread:false received>=2026-01-01 received<=2026-01-31"
+	if got != want {
+		t.Fatalf("query = %q, want %q", got, want)
+	}
+}
+
+func TestBuildSearchQueryReadFlags(t *testing.T) {
+	_, err := buildSearchQuery("", "", "", "", "", "", false, true, true, "", "")
+	if err == nil {
+		t.Fatalf("expected error when unread and is-read are both set")
+	}
+}
+
+func TestNormalizeDateTime(t *testing.T) {
+	got, err := normalizeDateTime("2026-01-15T10:30:00Z")
+	if err != nil {
+		t.Fatalf("normalizeDateTime error: %v", err)
+	}
+	if got != "2026-01-15T10:30:00Z" {
+		t.Fatalf("date = %q, want 2026-01-15T10:30:00Z", got)
+	}
+	got, err = normalizeDateTime("2026-01-15")
+	if err != nil {
+		t.Fatalf("normalizeDateTime error: %v", err)
+	}
+	if got != "2026-01-15" {
+		t.Fatalf("date = %q, want 2026-01-15", got)
+	}
+}
+
+func TestParseTrailingIntFlagShortCombined(t *testing.T) {
+	value, ok := parseTrailingIntFlag([]string{"report", "-n5"}, []string{"--limit", "-n"})
+	if !ok {
+		t.Fatalf("expected match for -n5")
+	}
+	if value != 5 {
+		t.Fatalf("value = %d, want 5", value)
+	}
+}
+
+func TestParseTrailingIntFlagShortSeparate(t *testing.T) {
+	value, ok := parseTrailingIntFlag([]string{"report", "-n", "7"}, []string{"--limit", "-n"})
+	if !ok {
+		t.Fatalf("expected match for -n 7")
+	}
+	if value != 7 {
+		t.Fatalf("value = %d, want 7", value)
+	}
+}
+
+func TestParseTrailingIntFlagIgnoresNonNumeric(t *testing.T) {
+	_, ok := parseTrailingIntFlag([]string{"report", "-not"}, []string{"--limit", "-n"})
+	if ok {
+		t.Fatalf("expected -not to be ignored")
+	}
+}

@@ -1362,6 +1362,13 @@ func parseTrailingIntFlag(args []string, names []string) (int, bool) {
 				if parsed, err := strconv.Atoi(value); err == nil {
 					return parsed, true
 				}
+				continue
+			}
+			if strings.HasPrefix(name, "-") && !strings.HasPrefix(name, "--") && strings.HasPrefix(arg, name) && len(arg) > len(name) {
+				remainder := strings.TrimPrefix(arg, name)
+				if parsed, err := strconv.Atoi(remainder); err == nil {
+					return parsed, true
+				}
 			}
 		}
 	}
