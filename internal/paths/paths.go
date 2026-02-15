@@ -39,6 +39,22 @@ func RuntimePath() string {
 	return filepath.Join(StateDir(), appName, "runtime.json")
 }
 
+func DaemonStateDir() string {
+	return filepath.Join(StateDir(), appName)
+}
+
+func DaemonSocketPath() string {
+	return filepath.Join(DaemonStateDir(), "daemon.sock")
+}
+
+func DaemonLockPath() string {
+	return filepath.Join(DaemonStateDir(), "daemon.lock")
+}
+
+func DaemonStatusPath() string {
+	return filepath.Join(DaemonStateDir(), "daemon.json")
+}
+
 func ExpandUser(path string) string {
 	if path == "" {
 		return path

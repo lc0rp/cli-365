@@ -101,6 +101,31 @@ func TestRuntimePath(t *testing.T) {
 	}
 }
 
+func TestDaemonPaths(t *testing.T) {
+	stateDir := DaemonStateDir()
+	if stateDir == "" {
+		t.Error("DaemonStateDir returned empty string")
+	}
+	if !strings.HasSuffix(stateDir, "cli-365") {
+		t.Errorf("DaemonStateDir should end with cli-365: %s", stateDir)
+	}
+
+	socketPath := DaemonSocketPath()
+	if !strings.HasSuffix(socketPath, "daemon.sock") {
+		t.Errorf("DaemonSocketPath should end with daemon.sock: %s", socketPath)
+	}
+
+	lockPath := DaemonLockPath()
+	if !strings.HasSuffix(lockPath, "daemon.lock") {
+		t.Errorf("DaemonLockPath should end with daemon.lock: %s", lockPath)
+	}
+
+	statusPath := DaemonStatusPath()
+	if !strings.HasSuffix(statusPath, "daemon.json") {
+		t.Errorf("DaemonStatusPath should end with daemon.json: %s", statusPath)
+	}
+}
+
 func TestExpandUser(t *testing.T) {
 	home := HomeDir()
 

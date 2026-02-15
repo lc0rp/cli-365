@@ -21,6 +21,18 @@ func TestDefault(t *testing.T) {
 	if len(cfg.Auth.Scopes) == 0 {
 		t.Error("Auth.Scopes should not be empty")
 	}
+	if cfg.Daemon.MaxQueueSize != 64 {
+		t.Errorf("Daemon.MaxQueueSize = %d, want 64", cfg.Daemon.MaxQueueSize)
+	}
+	if cfg.Daemon.MaxRequestBytes != 1024*1024 {
+		t.Errorf("Daemon.MaxRequestBytes = %d, want 1048576", cfg.Daemon.MaxRequestBytes)
+	}
+	if cfg.Daemon.DefaultCommandTimeout <= 0 {
+		t.Errorf("Daemon.DefaultCommandTimeout = %s, want > 0", cfg.Daemon.DefaultCommandTimeout)
+	}
+	if !cfg.Daemon.RejectNewWhileAuthPaused {
+		t.Error("Daemon.RejectNewWhileAuthPaused should be true")
+	}
 }
 
 func TestLoadNonExistent(t *testing.T) {

@@ -141,6 +141,7 @@ func TestReadonlyCommandsMap(t *testing.T) {
 		"mail attachments list",
 		"auth status",
 		"browser status",
+		"daemon status",
 	}
 
 	for _, cmd := range readCmds {

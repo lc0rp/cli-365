@@ -26,6 +26,13 @@ var ReadonlyCommands = map[string]bool{
 	"browser status": true,
 	"browser stop":   true,
 
+	// Daemon commands (all safe control-plane)
+	"daemon":        true,
+	"daemon run":    true,
+	"daemon status": true,
+	"daemon stop":   true,
+	"daemon ping":   true,
+
 	// Mail read operations
 	"mail":               true,
 	"mail search":        true,

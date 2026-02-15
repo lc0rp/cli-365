@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -14,6 +15,7 @@ type Config struct {
 	Browser    BrowserConfig  `yaml:"browser"`
 	Auth       AuthConfig     `yaml:"auth"`
 	Security   SecurityConfig `yaml:"security"`
+	Daemon     DaemonConfig   `yaml:"daemon"`
 }
 
 type BrowserConfig struct {
@@ -35,6 +37,32 @@ type SecurityConfig struct {
 	Keyring   string   `yaml:"keyring"`
 }
 
+type DaemonConfig struct {
+	Enabled                          bool               `yaml:"enabled"`
+	SocketPath                       string             `yaml:"socket_path"`
+	LockPath                         string             `yaml:"lock_path"`
+	StatusPath                       string             `yaml:"status_path"`
+	MaxQueueSize                     int                `yaml:"max_queue_size"`
+	MaxRequestBytes                  int                `yaml:"max_request_bytes"`
+	DefaultCommandTimeout            time.Duration      `yaml:"default_command_timeout"`
+	AuthRecoveryTimeout              time.Duration      `yaml:"auth_recovery_timeout"`
+	RejectNewWhileAuthPaused         bool               `yaml:"reject_new_while_auth_paused"`
+	Display                          string             `yaml:"display"`
+	CoalesceIdenticalReads           bool               `yaml:"coalesce_identical_reads"`
+	DuplicateWriteWindowMail         time.Duration      `yaml:"duplicate_write_window_mail"`
+	DuplicateWriteWindowCalendar     time.Duration      `yaml:"duplicate_write_window_calendar"`
+	WriteRateLimitPerMinute          int                `yaml:"write_rate_limit_per_minute"`
+	RecipientWriteRateLimitPerMinute int                `yaml:"recipient_write_rate_limit_per_minute"`
+	Notify                           DaemonNotifyConfig `yaml:"notify"`
+}
+
+type DaemonNotifyConfig struct {
+	Provider    string `yaml:"provider"`
+	OpenClawCmd string `yaml:"openclaw_cmd"`
+	Channel     string `yaml:"channel"`
+	Target      string `yaml:"target"`
+}
+
 func Default() Config {
 	return Config{
 		ProfileDir: paths.ProfileDir(),
@@ -51,8 +79,31 @@ func Default() Config {
 			Scopes:      []string{"mail.readwrite", "mail.send"},
 		},
 		Security: SecurityConfig{
-			Allowlist: []string{"mail", "calendar", "auth", "browser"},
+			Allowlist: []string{"mail", "calendar", "auth", "browser", "daemon"},
 			Keyring:   "os",
+		},
+		Daemon: DaemonConfig{
+			Enabled:                          false,
+			SocketPath:                       "",
+			LockPath:                         "",
+			StatusPath:                       "",
+			MaxQueueSize:                     64,
+			MaxRequestBytes:                  1024 * 1024,
+			DefaultCommandTimeout:            2 * time.Minute,
+			AuthRecoveryTimeout:              5 * time.Minute,
+			RejectNewWhileAuthPaused:         true,
+			Display:                          ":1",
+			CoalesceIdenticalReads:           true,
+			DuplicateWriteWindowMail:         12 * time.Hour,
+			DuplicateWriteWindowCalendar:     1 * time.Hour,
+			WriteRateLimitPerMinute:          20,
+			RecipientWriteRateLimitPerMinute: 6,
+			Notify: DaemonNotifyConfig{
+				Provider:    "openclaw-cli",
+				OpenClawCmd: "openclaw",
+				Channel:     "discord",
+				Target:      "",
+			},
 		},
 	}
 }

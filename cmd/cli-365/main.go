@@ -21,8 +21,19 @@ import (
 	"github.com/lc0rp/cli-365/internal/security"
 )
 
+type cliAppOptions struct {
+	DisableDaemonForwarding bool
+}
+
 func main() {
-	app := &cli.App{
+	code := runCLI(context.Background(), os.Args, cliAppOptions{})
+	if code != 0 {
+		os.Exit(code)
+	}
+}
+
+func newCLIApp(opts cliAppOptions) *cli.App {
+	return &cli.App{
 		Name:  "cli-365",
 		Usage: "CLI for Outlook OWA via a managed browser",
 		Flags: []cli.Flag{
@@ -53,20 +64,64 @@ func main() {
 				Name:  "cdp-port",
 				Usage: "Override browser.cdp_port for this run",
 			},
+			&cli.BoolFlag{
+				Name:  "daemon",
+				Usage: "Route command execution through local cli-365 daemon",
+			},
 		},
-		Before: enforceSecurityPolicy,
+		ExitErrHandler: func(_ *cli.Context, _ error) {},
+		Before:         newAppBefore(opts),
 		Commands: []*cli.Command{
 			authCommand(),
 			browserCommand(),
+			daemonCommand(),
 			mailCommand(),
 			calendarCommand(),
 			debugCommand(),
 		},
 	}
+}
 
-	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+func runCLI(ctx context.Context, args []string, opts cliAppOptions) int {
+	return runCLIApp(ctx, newCLIApp(opts), args)
+}
+
+func runCLIApp(ctx context.Context, app *cli.App, args []string) int {
+	var err error
+	if ctx == nil {
+		err = app.Run(args)
+	} else {
+		err = app.RunContext(ctx, args)
+	}
+	if err == nil {
+		return 0
+	}
+
+	if ec, ok := err.(cli.ExitCoder); ok {
+		if ec.ExitCode() == 0 {
+			return 0
+		}
+		msg := strings.TrimSpace(err.Error())
+		if msg != "" {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		return ec.ExitCode()
+	}
+
+	fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	return 1
+}
+
+func newAppBefore(opts cliAppOptions) func(*cli.Context) error {
+	return func(c *cli.Context) error {
+		commandPath := buildCommandPath(c)
+		if !opts.DisableDaemonForwarding && c.Bool("daemon") && !strings.HasPrefix(commandPath, "daemon") && commandPath != "" {
+			if err := enforceSecurityPolicy(c); err != nil {
+				return err
+			}
+			return runViaDaemon(c)
+		}
+		return enforceSecurityPolicy(c)
 	}
 }
 
