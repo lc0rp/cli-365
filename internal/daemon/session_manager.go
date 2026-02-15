@@ -21,6 +21,8 @@ const (
 	defaultSessionProbeLimit = 5 * time.Second
 )
 
+var errSessionProbeUnavailable = errors.New("session probe unavailable")
+
 type tokenLoaderFunc func() (*owa.Tokens, error)
 type tokenSaverFunc func(tokens *owa.Tokens) error
 type tokenRefresherFunc func(ctx context.Context) (*owa.Tokens, error)
@@ -81,6 +83,35 @@ func (s *Server) ensureSessionReady(parent context.Context, deadline time.Time, 
 	valid, err := probeFn(probeCtx)
 	probeCancel()
 	if err != nil {
+		if errors.Is(err, errSessionProbeUnavailable) {
+			if !s.tryRecoverBrowserForSession(parent, deadline) {
+				return true
+			}
+
+			remaining = time.Until(deadline)
+			if remaining <= 0 {
+				return false
+			}
+
+			retryCtx, retryCancel := context.WithTimeout(parent, minDuration(remaining, defaultSessionProbeLimit))
+			retryValid, retryErr := probeFn(retryCtx)
+			retryCancel()
+			if retryErr != nil {
+				if errors.Is(retryErr, errSessionProbeUnavailable) {
+					return true
+				}
+				if !errors.Is(retryErr, context.Canceled) && !errors.Is(retryErr, context.DeadlineExceeded) {
+					s.logEvent("warn", "session_probe_error", map[string]interface{}{
+						"error": retryErr.Error(),
+					})
+				}
+				return true
+			}
+			if retryValid {
+				return true
+			}
+			return s.runAuthRecovery(parent)
+		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return true
 		}
@@ -196,9 +227,45 @@ func (s *Server) defaultSessionProbe(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if page == nil {
-		return true, nil
+		return false, errSessionProbeUnavailable
 	}
 	return owa.IsLoggedIn(page), nil
+}
+
+func (s *Server) tryRecoverBrowserForSession(parent context.Context, deadline time.Time) bool {
+	if s.execFn == nil {
+		return false
+	}
+
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return false
+	}
+	timeout := minDuration(remaining, 30*time.Second)
+
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+
+	result := s.execFn(ctx, []string{"browser", "start"}, timeout)
+	if result.ExitCode == 0 && result.Err == nil {
+		s.maintainPrimaryOWATab()
+		s.logEvent("info", "session_browser_recovered", map[string]interface{}{
+			"timeout_ms": timeout.Milliseconds(),
+		})
+		return true
+	}
+
+	msg := strings.TrimSpace(result.Stderr)
+	if msg == "" && result.Err != nil {
+		msg = result.Err.Error()
+	}
+	if msg == "" {
+		msg = "browser start recovery failed"
+	}
+	s.logEvent("warn", "session_browser_recovery_failed", map[string]interface{}{
+		"error": msg,
+	})
+	return false
 }
 
 func (s *Server) currentPrimaryOWAPage() (*rod.Page, error) {
