@@ -96,7 +96,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Add payload size limits and command table validation.
 - [x] Bound in-memory response buffering for large outputs.
 - [x] Graceful stop with queue drain-fail policy for pending requests + stop cleanup for managed browser/tab state (cleanup only stops browser when daemon `state_dir` matches runtime state parent).
-- [ ] Complete contract tests to match non-daemon command semantics. (deterministic parity currently covers `help`, unknown command, missing help topic, `auth status` text/json in empty+cached-token states, `browser status` text/json, `daemon status` text/json, `daemon ping` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)
+- [ ] Complete contract tests to match non-daemon command semantics. (deterministic parity currently covers `help`, unknown command, missing help topic, `auth status` text/json in empty+cached-token states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)
 
 ## Test gate before merge
 

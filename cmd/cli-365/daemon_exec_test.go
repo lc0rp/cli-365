@@ -119,12 +119,20 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 			argv: []string{"auth", "status"},
 		},
 		{
+			name: "auth logout",
+			argv: []string{"auth", "logout"},
+		},
+		{
 			name: "auth status json",
 			argv: []string{"--json", "auth", "status"},
 		},
 		{
 			name: "browser status",
 			argv: []string{"browser", "status"},
+		},
+		{
+			name: "browser stop",
+			argv: []string{"browser", "stop"},
 		},
 		{
 			name: "browser status json",
