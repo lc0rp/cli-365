@@ -209,3 +209,87 @@ func TestServerRequestTimeoutErrorCodeOverIPC(t *testing.T) {
 		t.Fatal("timed out waiting for server shutdown")
 	}
 }
+
+func TestServerGracefulStopAllowsInFlightRequestToFinish(t *testing.T) {
+	opts := testOptions(t)
+	opts.Allowlist = []string{"mail"}
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	srv := NewServer(opts, func(ctx context.Context, _ []string, _ time.Duration) ExecResult {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+			return ExecResult{
+				ExitCode: 0,
+				Stdout:   "ok\n",
+			}
+		case <-ctx.Done():
+			return ExecResult{
+				ExitCode: 1,
+				Err:      ctx.Err(),
+				Stderr:   ctx.Err().Error(),
+			}
+		}
+	})
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(runCtx)
+	}()
+	waitForPing(t, opts.SocketPath, 3*time.Second)
+
+	type callResult struct {
+		resp Response
+		err  error
+	}
+	inFlight := make(chan callResult, 1)
+	go func() {
+		resp, err := Call(opts.SocketPath, Request{
+			RequestID:   "in-flight-stop",
+			Command:     CommandExec,
+			CommandPath: "mail search",
+			Argv:        []string{"mail", "search", "invoice"},
+		}, 4*time.Second)
+		inFlight <- callResult{resp: resp, err: err}
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not start executing")
+	}
+
+	if err := Stop(opts.SocketPath, 2*time.Second); err != nil {
+		t.Fatalf("Stop() error: %v", err)
+	}
+
+	close(release)
+
+	select {
+	case result := <-inFlight:
+		if result.err != nil {
+			t.Fatalf("in-flight Call() error: %v", result.err)
+		}
+		if !result.resp.OK || result.resp.ExitCode != 0 {
+			t.Fatalf("in-flight response not ok: code=%q stderr=%q", result.resp.ErrorCode, result.resp.Stderr)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("timed out waiting for in-flight response")
+	}
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run() error: %v", err)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("timed out waiting for server shutdown")
+	}
+}

@@ -83,7 +83,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Add IPC payload size limits and command-table validation.
 - [x] Add panic guard around request execution.
 - [x] Bound in-memory response buffering for large outputs.
-- [ ] Implement graceful daemon stop with queue drain policy + browser cleanup.
+- [ ] Implement graceful daemon stop with queue drain policy + browser cleanup. (queue drain policy implemented; browser cleanup pending browser/session manager)
 - [ ] Add contract tests for daemon vs non-daemon output parity. (baseline parity tests added for deterministic commands)
 
 ## Required test stories

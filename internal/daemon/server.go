@@ -29,6 +29,8 @@ type Server struct {
 	listener net.Listener
 	lockFile *os.File
 	execQ    chan queuedExec
+	stopCh   chan struct{}
+	stopOnce sync.Once
 
 	pauseMu sync.RWMutex
 	paused  bool
@@ -73,6 +75,7 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 		opts:               opts,
 		execFn:             execFn,
 		execQ:              make(chan queuedExec, opts.MaxQueueSize),
+		stopCh:             make(chan struct{}),
 		pauseCh:            make(chan struct{}),
 		coalesced:          make(map[string][]chan Response),
 		writeSeen:          make(map[string]time.Time),
@@ -299,7 +302,7 @@ func (s *Server) handleConn(parent context.Context, conn net.Conn) {
 	_ = enc.Encode(response)
 
 	if req.Command == CommandStop {
-		s.requestStop()
+		s.requestGracefulStop()
 	}
 }
 
@@ -315,6 +318,23 @@ func (s *Server) requestStop() {
 		_ = s.listener.Close()
 		s.listener = nil
 	}
+	s.setPaused(false)
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
+}
+
+func (s *Server) requestGracefulStop() {
+	s.mu.Lock()
+	if s.listener != nil {
+		_ = s.listener.Close()
+		s.listener = nil
+	}
+	s.mu.Unlock()
+	s.setPaused(false)
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
 }
 
 func (s *Server) tryEnqueue(task queuedExec) string {
@@ -379,17 +399,39 @@ func (s *Server) runWorker(ctx context.Context) {
 	stopMsg := "daemon unavailable"
 
 	for {
+		if s.stopRequested() {
+			s.drainPending(stopCode, stopMsg)
+			return
+		}
+
 		if !s.waitUntilUnpaused(ctx) {
+			s.drainPending(stopCode, stopMsg)
+			return
+		}
+		if s.stopRequested() {
 			s.drainPending(stopCode, stopMsg)
 			return
 		}
 
 		select {
+		case <-s.stopCh:
+			s.drainPending(stopCode, stopMsg)
+			return
 		case <-ctx.Done():
 			s.drainPending(stopCode, stopMsg)
 			return
 		case task := <-s.execQ:
+			if s.stopRequested() {
+				s.completeTask(task, daemonFailureResponse(task.req.RequestID, stopCode, stopMsg))
+				s.drainPending(stopCode, stopMsg)
+				return
+			}
 			if !s.waitUntilUnpaused(ctx) {
+				s.completeTask(task, daemonFailureResponse(task.req.RequestID, stopCode, stopMsg))
+				s.drainPending(stopCode, stopMsg)
+				return
+			}
+			if s.stopRequested() {
 				s.completeTask(task, daemonFailureResponse(task.req.RequestID, stopCode, stopMsg))
 				s.drainPending(stopCode, stopMsg)
 				return
@@ -594,8 +636,19 @@ func (s *Server) waitUntilUnpaused(ctx context.Context) bool {
 		select {
 		case <-ctx.Done():
 			return false
+		case <-s.stopCh:
+			return false
 		case <-ch:
 		}
+	}
+}
+
+func (s *Server) stopRequested() bool {
+	select {
+	case <-s.stopCh:
+		return true
+	default:
+		return false
 	}
 }
 
