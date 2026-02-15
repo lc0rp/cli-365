@@ -118,6 +118,10 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 			argv: []string{"auth", "status"},
 		},
 		{
+			name: "auth status json",
+			argv: []string{"--json", "auth", "status"},
+		},
+		{
 			name: "browser status",
 			argv: []string{"browser", "status"},
 		},
@@ -144,6 +148,22 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 		{
 			name: "daemon help",
 			argv: []string{"help", "daemon"},
+		},
+		{
+			name: "daemon status",
+			argv: []string{"daemon", "status"},
+		},
+		{
+			name: "daemon status json",
+			argv: []string{"--json", "daemon", "status"},
+		},
+		{
+			name: "daemon ping",
+			argv: []string{"daemon", "ping"},
+		},
+		{
+			name: "daemon ping json",
+			argv: []string{"--json", "daemon", "ping"},
 		},
 		{
 			name: "debug help",
