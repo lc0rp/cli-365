@@ -84,7 +84,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Add panic guard around request execution.
 - [x] Bound in-memory response buffering for large outputs.
 - [ ] Implement graceful daemon stop with queue drain policy + browser cleanup. (queue drain policy implemented; browser cleanup pending browser/session manager)
-- [ ] Add contract tests for daemon vs non-daemon output parity. (baseline parity tests added for deterministic commands)
+- [ ] Add contract tests for daemon vs non-daemon output parity. (deterministic parity now covers `help`, unknown command, missing help topic, `auth status`, `browser status` text/json, help topic paths)
 
 ## Required test stories
 
@@ -98,7 +98,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [ ] Integration: browser crash recovery.
 - [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
 - [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
-- [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (baseline parity tests cover `help`, unknown command, missing help topic)
+- [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (deterministic parity expanded to include `auth status`, `browser status` text/json, and command help topics)
 - [x] Contract: stable daemon error codes are emitted (`QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
 
 ## Definition of done (v1 readiness)

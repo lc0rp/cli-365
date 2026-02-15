@@ -91,7 +91,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Add payload size limits and command table validation.
 - [x] Bound in-memory response buffering for large outputs.
 - [x] Graceful stop with queue drain-fail policy for pending requests (browser cleanup still pending browser/session manager work).
-- [ ] Complete contract tests to match non-daemon command semantics. (baseline deterministic parity tests added)
+- [ ] Complete contract tests to match non-daemon command semantics. (deterministic parity currently covers `help`, unknown command, missing help topic, `auth status`, `browser status` text/json, and help topics)
 
 ## Test gate before merge
 

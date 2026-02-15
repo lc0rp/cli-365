@@ -80,6 +80,11 @@ func runDaemonCLI(t *testing.T, socketPath string, argv []string) cliInvocationR
 }
 
 func TestDaemonInProcessDispatchParity(t *testing.T) {
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", homeDir)
+
 	opts := daemonTestOptions(t)
 	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
 
@@ -111,6 +116,22 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 		{
 			name: "auth status",
 			argv: []string{"auth", "status"},
+		},
+		{
+			name: "browser status",
+			argv: []string{"browser", "status"},
+		},
+		{
+			name: "browser status json",
+			argv: []string{"--json", "browser", "status"},
+		},
+		{
+			name: "mail help",
+			argv: []string{"help", "mail"},
+		},
+		{
+			name: "calendar help",
+			argv: []string{"help", "calendar"},
 		},
 	}
 
