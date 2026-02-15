@@ -107,5 +107,5 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Queue is FIFO + bounded with deterministic overflow behavior.
 - [x] Auth pause/recovery path works with timeout fan-out errors.
 - [x] `--cdp-port` mismatch is enforced.
-- [ ] OpenClaw notifications fire on auth-required and auth-timeout.
+- [x] OpenClaw notifications fire on auth-required and auth-timeout. (auth recovery path + notifier command invocation tests; host CLI availability still tracked in pre-dev gate)
 - [x] No bearer/canary token leakage in daemon logs.

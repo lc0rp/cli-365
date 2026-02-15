@@ -182,6 +182,10 @@ func defaultNotifyAuth(provider, openClawCmd, channel, target string) notifyAuth
 		if openClawCmd == "" {
 			return errors.New("openclaw command is empty")
 		}
+		cmdParts := strings.Fields(openClawCmd)
+		if len(cmdParts) == 0 {
+			return errors.New("openclaw command is empty")
+		}
 
 		message := fmt.Sprintf(
 			"service=cli-365 severity=%s reason=%s login_url=%s queue_depth=%d at=%s",
@@ -200,8 +204,13 @@ func defaultNotifyAuth(provider, openClawCmd, channel, target string) notifyAuth
 			args = append(args, "--target", target)
 		}
 		args = append(args, message)
+		finalArgs := make([]string, 0, len(cmdParts)-1+len(args))
+		if len(cmdParts) > 1 {
+			finalArgs = append(finalArgs, cmdParts[1:]...)
+		}
+		finalArgs = append(finalArgs, args...)
 
-		cmd := exec.CommandContext(ctx, openClawCmd, args...)
+		cmd := exec.CommandContext(ctx, cmdParts[0], finalArgs...)
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		return cmd.Run()

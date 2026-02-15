@@ -72,6 +72,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Trigger secure-input command + OpenClaw CLI notification.
 - [x] Timeout fan-out failure (`AUTH_TIMEOUT`) after 5m default.
 - [x] Add daemon IPC integration tests for paused/timeout auth recovery responses.
+- [x] Validate default OpenClaw CLI notifier invocation contract with command-arg tests.
 
 ### Phase E: Coalescing + flood controls
 
