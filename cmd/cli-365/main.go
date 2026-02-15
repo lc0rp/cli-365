@@ -217,7 +217,7 @@ func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod
 					Managed:    false,
 					StartedAt:  time.Now(),
 				})
-				if err := ensureLoggedIn(c, b); err != nil {
+				if err := ensureLoggedIn(c, b, cfg); err != nil {
 					return nil, err
 				}
 				return b, nil
@@ -230,7 +230,7 @@ func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod
 		if err != nil {
 			return nil, err
 		}
-		if err := ensureLoggedIn(c, b); err != nil {
+		if err := ensureLoggedIn(c, b, cfg); err != nil {
 			return nil, err
 		}
 		return b, nil
@@ -245,7 +245,7 @@ func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod
 				Managed:    false,
 				StartedAt:  time.Now(),
 			})
-			if err := ensureLoggedIn(c, b); err != nil {
+			if err := ensureLoggedIn(c, b, cfg); err != nil {
 				return nil, err
 			}
 			return b, nil
@@ -259,19 +259,19 @@ func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureLoggedIn(c, b); err != nil {
+	if err := ensureLoggedIn(c, b, cfg); err != nil {
 		return nil, err
 	}
 	return b, nil
 }
 
-func ensureLoggedIn(c *cli.Context, b *rod.Browser) error {
+func ensureLoggedIn(c *cli.Context, b *rod.Browser, cfg config.Config) error {
 	client := owa.NewClient(b)
 	if err := client.Connect(); err != nil {
 		return err
 	}
 	page := client.Page()
-	if owa.IsLoggedIn(page) {
+	if owa.IsSessionValid(page) {
 		return nil
 	}
 	if info, err := page.Info(); err == nil {
@@ -285,11 +285,19 @@ func ensureLoggedIn(c *cli.Context, b *rod.Browser) error {
 			return err
 		}
 	}
-	fmt.Println("[ensure-cdp] Please complete login in the browser window...")
+	if !owa.IsLoggedIn(page) {
+		fmt.Println("[ensure-cdp] Please complete login in the browser window...")
+		maybeLaunchSecureInput(cfg)
+	} else {
+		fmt.Println("[ensure-cdp] Session needs re-auth; attempting to refresh...")
+		maybeLaunchSecureInput(cfg)
+	}
 	timeout := c.Duration("ensure-cdp-timeout")
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
+	stopPoll := startNumberMatchPoll(page, timeout)
+	defer stopPoll()
 	return owa.WaitForLoggedIn(page, timeout)
 }
 
@@ -375,16 +383,20 @@ func authCommand() *cli.Command {
 					}
 
 					// Check if already logged in
-					if owa.IsLoggedIn(page) {
+					if owa.IsSessionValid(page) {
 						fmt.Println("Already logged in!")
 					} else {
 						fmt.Println("Please complete login in the browser window...")
 						fmt.Println("Waiting for authentication...")
+						maybeLaunchSecureInput(cfg)
 
 						timeout := c.Duration("timeout")
+						stopPoll := startNumberMatchPoll(page, timeout)
 						if err := owa.WaitForLogin(page, timeout); err != nil {
+							stopPoll()
 							return err
 						}
+						stopPoll()
 						fmt.Println("Login successful!")
 					}
 

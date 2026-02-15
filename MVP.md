@@ -26,8 +26,8 @@ Legend: ✅ working | ⚠️ partial | ❌ failing | ⏳ not tested
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| List events | ⏳ | Needs verification |
-| Get event | ⏳ | Needs verification |
-| Create event | ⏳ | Needs verification |
-| Update event | ⏳ | Needs verification |
-| Delete event | ⏳ | Needs verification |
+| List events | ✅ | `calendar list` works; server appears to ignore `CalendarView` so client filters by range + applies `--limit` (slower than ideal) |
+| Get event | ✅ | `calendar get <ItemId>` works |
+| Create event | ✅ | `calendar create` works (returns `ItemId` + `ChangeKey`); `--location` currently not persisted/returned (TBD) |
+| Update event | ❌ | `calendar update` fails with `ErrorSendMeetingInvitationsOrCancellationsRequired` (UpdateItem) |
+| Delete event | ✅ | `calendar delete <ItemId>` works (MoveToDeletedItems). Note: `calendar get` may still succeed post-delete since the item can be fetched by id in Deleted Items |

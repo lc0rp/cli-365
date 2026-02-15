@@ -121,7 +121,7 @@ func debugCommand() *cli.Command {
 						return err
 					}
 
-					if !owa.IsLoggedIn(page) {
+					if !owa.IsSessionValid(page) {
 						if !c.Bool("json") {
 							fmt.Println("Please complete login in the browser window...")
 						}
@@ -459,7 +459,7 @@ func debugCommand() *cli.Command {
 					if err := owa.NavigateToOWA(page); err != nil {
 						return err
 					}
-					if !owa.IsLoggedIn(page) {
+					if !owa.IsSessionValid(page) {
 						fmt.Println("Please complete login in the browser window...")
 						if err := owa.WaitForLogin(page, c.Duration("timeout")); err != nil {
 							return err

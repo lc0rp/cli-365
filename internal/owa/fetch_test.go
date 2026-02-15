@@ -171,6 +171,24 @@ func TestEncodeURLPostData(t *testing.T) {
 	}
 }
 
+func TestNormalizeAnchorMailbox(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{" user@example.com ", "SMTP:user@example.com"},
+		{"SMTP:user@example.com", "SMTP:user@example.com"},
+		{"PUID:123@abcd", "PUID:123@abcd"},
+		{"OID:123@abcd", "OID:123@abcd"},
+	}
+	for _, tc := range cases {
+		if got := normalizeAnchorMailbox(tc.in); got != tc.want {
+			t.Fatalf("normalizeAnchorMailbox(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestFetchResponseParsing(t *testing.T) {
 	respJSON := `{
 		"status": 200,

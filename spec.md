@@ -39,6 +39,15 @@ auth:
   account_hint: ""   # email
   readonly: false
   scopes: ["mail.readwrite", "mail.send"]
+  secure_input:
+    enabled: true
+    command: "secure-targeted-input"
+    selector: "input[name=passwd], input[type=password]"
+    selector_2: "input[type=email], input[name=loginfmt]"
+    submit_selector: "input[type=submit], button[type=submit]"
+    target_tab_url: "login.microsoftonline.com"
+    target_tab_id: ""
+    public_url: ""
 security:
   allowlist: ["mail", "auth", "browser"]
   keyring: "os"      # os | encrypted-file

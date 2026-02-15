@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-rod/rod"
 )
 
-var calendarActionOptions = OWAActionOptions{App: "Calendar", ReqSource: "Calendar"}
+// Calendar service actions work under the Mail app endpoint/req-source.
+// Using app=Calendar has been observed to 401 in real sessions.
+var calendarActionOptions = OWAActionOptions{App: "Mail", ReqSource: "Mail"}
 
 // CalendarViewResult represents a calendar list response.
 type CalendarViewResult struct {
@@ -28,7 +31,7 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 	}
 	folderID = resolved
 
-	body, err := buildCalendarViewJsonRequest(start, end, maxResults, folderID)
+	body, err := buildCalendarViewRequest(start, end, maxResults, folderID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,11 +41,11 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 		return nil, err
 	}
 	if resp.Status != 200 && shouldRetryCalendarView(resp) {
-		fallback, ferr := buildCalendarViewRequest(start, end, maxResults, folderID)
+		fallback, ferr := buildCalendarViewJsonRequest(start, end, maxResults, folderID)
 		if ferr != nil {
 			return nil, ferr
 		}
-		if retry, rerr := CallOWAAction(page, tokens, "FindItem", fallback); rerr == nil && retry != nil {
+		if retry, rerr := CallOWAActionWithOptions(page, tokens, "FindItem", fallback, calendarActionOptions); rerr == nil && retry != nil {
 			resp = retry
 		}
 	}
@@ -55,10 +58,50 @@ func ListCalendarEvents(page *rod.Page, tokens *Tokens, start string, end string
 		return nil, err
 	}
 
+	// Some servers ignore CalendarView (returning an unbounded view). If we see out-of-range
+	// items, fall back to client-side filtering to preserve CLI semantics.
+	if startT, err := parseOWATime(start); err == nil {
+		if endT, err := parseOWATime(end); err == nil && endT.After(startT) {
+			filtered := make([]CalendarEvent, 0, len(events))
+			outOfRange := 0
+			for _, ev := range events {
+				evStart, errStart := parseOWATime(ev.Start)
+				evEnd, errEnd := parseOWATime(ev.End)
+				if errStart != nil || errEnd != nil {
+					continue
+				}
+				if evEnd.After(startT) && evStart.Before(endT) {
+					filtered = append(filtered, ev)
+				} else {
+					outOfRange++
+				}
+			}
+			if outOfRange > 0 {
+				events = filtered
+				total = len(filtered)
+			}
+		}
+	}
+
+	if maxResults > 0 && len(events) > maxResults {
+		events = events[:maxResults]
+	}
+
 	return &CalendarViewResult{
 		TotalCount: total,
 		Events:     events,
 	}, nil
+}
+
+func parseOWATime(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, errors.New("time required")
+	}
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, raw)
 }
 
 // GetCalendarEvent retrieves a single calendar event by ID.
@@ -109,18 +152,75 @@ func CreateCalendarEvent(page *rod.Page, tokens *Tokens, draft *CalendarEventDra
 
 // UpdateCalendarEvent updates an existing calendar event.
 func UpdateCalendarEvent(page *rod.Page, tokens *Tokens, eventID string, update *CalendarEventUpdate) error {
+	// UpdateItem for calendar items can be picky about change keys. Best-effort fetch and include it.
+	var changeKey string
+	if page != nil && tokens != nil {
+		if current, err := GetCalendarEvent(page, tokens, eventID); err == nil && current != nil {
+			changeKey = strings.TrimSpace(current.ChangeKey)
+		}
+	}
+
 	reqBody, err := buildUpdateCalendarEventRequest(eventID, update)
 	if err != nil {
 		return err
+	}
+	if changeKey != "" {
+		if body, ok := reqBody["Body"].(map[string]interface{}); ok {
+			setUpdateItemChangeKey(body, changeKey)
+		}
 	}
 	resp, err := CallOWAActionWithOptions(page, tokens, "UpdateItem", reqBody, calendarActionOptions)
 	if err != nil {
 		return err
 	}
-	if resp.Status != 200 {
-		return fmt.Errorf("update event failed with status %d: %s", resp.Status, formatOWAErrorDetails(resp))
+
+	checkOK := func(r *FetchResponse) error {
+		if r == nil {
+			return errors.New("nil response")
+		}
+		if r.Status != 200 {
+			return fmt.Errorf("status %d: %s", r.Status, formatOWAErrorDetails(r))
+		}
+		if err := ensureOWASuccess(r.Body); err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
+
+	if err := checkOK(resp); err == nil {
+		return nil
+	} else if shouldRetryCalendarView(resp) || parseOWAError(resp.Body).Code != "" {
+		// Best-effort fallback: some servers reject UpdateItemJsonRequest for calendar updates.
+		fallback, ferr := buildUpdateCalendarEventRequestBody(eventID, update)
+		if ferr == nil {
+			if changeKey != "" {
+				setUpdateItemChangeKey(fallback, changeKey)
+			}
+			if retry, rerr := CallOWAActionWithOptions(page, tokens, "UpdateItem", fallback, calendarActionOptions); rerr == nil {
+				if okErr := checkOK(retry); okErr == nil {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("update event failed: %w", err)
+	}
+	return fmt.Errorf("update event failed: %w", err)
+}
+
+func setUpdateItemChangeKey(body map[string]interface{}, changeKey string) {
+	if body == nil || strings.TrimSpace(changeKey) == "" {
+		return
+	}
+	changes, ok := body["ItemChanges"].([]map[string]interface{})
+	if !ok || len(changes) == 0 {
+		return
+	}
+	itemChange := changes[0]
+	itemID, ok := itemChange["ItemId"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	itemID["ChangeKey"] = changeKey
 }
 
 // DeleteCalendarEvent deletes a calendar event.
@@ -128,20 +228,58 @@ func DeleteCalendarEvent(page *rod.Page, tokens *Tokens, eventID string) error {
 	if strings.TrimSpace(eventID) == "" {
 		return errors.New("event ID required")
 	}
-	body := map[string]interface{}{
-		"ItemIds": []map[string]interface{}{
-			{"__type": "ItemId:#Exchange", "Id": eventID},
-		},
-		"DeleteType": "MoveToDeletedItems",
-	}
-	resp, err := CallOWAActionWithOptions(page, tokens, "DeleteItem", body, calendarActionOptions)
+	reqBody, err := buildDeleteCalendarEventJsonRequest(eventID)
 	if err != nil {
 		return err
+	}
+	resp, err := CallOWAActionWithOptions(page, tokens, "DeleteItem", reqBody, calendarActionOptions)
+	if err != nil {
+		return err
+	}
+	if resp.Status != 200 && shouldRetryCalendarView(resp) {
+		fallback := buildDeleteCalendarEventRequest(eventID)
+		if retry, rerr := CallOWAActionWithOptions(page, tokens, "DeleteItem", fallback, calendarActionOptions); rerr == nil && retry != nil {
+			resp = retry
+		}
 	}
 	if resp.Status != 200 {
 		return fmt.Errorf("delete event failed with status %d: %s", resp.Status, formatOWAErrorDetails(resp))
 	}
+	if err := ensureOWASuccess(resp.Body); err != nil {
+		return fmt.Errorf("delete event failed: %w", err)
+	}
 	return nil
+}
+
+func buildDeleteCalendarEventRequest(eventID string) map[string]interface{} {
+	return map[string]interface{}{
+		"ItemIds": []map[string]interface{}{
+			{"__type": "ItemId:#Exchange", "Id": eventID},
+		},
+		"DeleteType": "MoveToDeletedItems",
+		// Required for Calendar items (even for "SendToNone").
+		"SendMeetingCancellations": "SendToNone",
+	}
+}
+
+func buildDeleteCalendarEventJsonRequest(eventID string) (map[string]interface{}, error) {
+	if strings.TrimSpace(eventID) == "" {
+		return nil, errors.New("event ID required")
+	}
+	body := map[string]interface{}{
+		"__type": "DeleteItemRequest:#Exchange",
+		"ItemIds": []map[string]interface{}{
+			{"__type": "ItemId:#Exchange", "Id": eventID},
+		},
+		"DeleteType": "MoveToDeletedItems",
+		// Required for Calendar items (even for "SendToNone").
+		"SendMeetingCancellations": "SendToNone",
+	}
+	return map[string]interface{}{
+		"__type": "DeleteItemJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body":   body,
+	}, nil
 }
 
 func buildCalendarViewRequest(start string, end string, maxResults int, folderID string) (map[string]interface{}, error) {
@@ -336,6 +474,20 @@ func buildCreateCalendarEventRequest(draft *CalendarEventDraft) (map[string]inte
 }
 
 func buildUpdateCalendarEventRequest(eventID string, update *CalendarEventUpdate) (map[string]interface{}, error) {
+	body, err := buildUpdateCalendarEventRequestBody(eventID, update)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"__type": "UpdateItemJsonRequest:#Exchange",
+		"Header": buildJsonRequestHeader(),
+		"Body":   body,
+		// Some servers expect this at the JsonRequest layer for calendar updates.
+		"SendMeetingInvitationsOrCancellations": "SendToNone",
+	}, nil
+}
+
+func buildUpdateCalendarEventRequestBody(eventID string, update *CalendarEventUpdate) (map[string]interface{}, error) {
 	if strings.TrimSpace(eventID) == "" {
 		return nil, errors.New("event ID required")
 	}
@@ -420,12 +572,7 @@ func buildUpdateCalendarEventRequest(eventID string, update *CalendarEventUpdate
 		},
 		"SendMeetingInvitationsOrCancellations": "SendToNone",
 	}
-
-	return map[string]interface{}{
-		"__type": "UpdateItemJsonRequest:#Exchange",
-		"Header": buildJsonRequestHeader(),
-		"Body":   body,
-	}, nil
+	return body, nil
 }
 
 func buildCalendarAttendees(list []EmailAddress) []map[string]interface{} {

@@ -24,10 +24,22 @@ type BrowserConfig struct {
 }
 
 type AuthConfig struct {
-	Tenant      string   `yaml:"tenant"`
-	AccountHint string   `yaml:"account_hint"`
-	Readonly    bool     `yaml:"readonly"`
-	Scopes      []string `yaml:"scopes"`
+	Tenant      string            `yaml:"tenant"`
+	AccountHint string            `yaml:"account_hint"`
+	Readonly    bool              `yaml:"readonly"`
+	Scopes      []string          `yaml:"scopes"`
+	SecureInput SecureInputConfig `yaml:"secure_input"`
+}
+
+type SecureInputConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Command        string `yaml:"command"`
+	Selector       string `yaml:"selector"`
+	Selector2      string `yaml:"selector_2"`
+	SubmitSelector string `yaml:"submit_selector"`
+	TargetTabURL   string `yaml:"target_tab_url"`
+	TargetTabID    string `yaml:"target_tab_id"`
+	PublicURL      string `yaml:"public_url"`
 }
 
 type SecurityConfig struct {
@@ -49,6 +61,16 @@ func Default() Config {
 			AccountHint: "",
 			Readonly:    false,
 			Scopes:      []string{"mail.readwrite", "mail.send"},
+			SecureInput: SecureInputConfig{
+				Enabled:        true,
+				Command:        "secure-targeted-input",
+				Selector:       "input[name=passwd], input[type=password]",
+				Selector2:      "input[type=email], input[name=loginfmt]",
+				SubmitSelector: "input[type=submit], button[type=submit]",
+				TargetTabURL:   "login.microsoftonline.com",
+				TargetTabID:    "",
+				PublicURL:      "",
+			},
 		},
 		Security: SecurityConfig{
 			Allowlist: []string{"mail", "calendar", "auth", "browser"},

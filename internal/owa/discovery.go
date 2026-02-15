@@ -62,6 +62,10 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 	result, err := page.Eval(`() => {
 		const isGuid = (v) => typeof v === "string" && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v);
+		const looksLikeAnchorMailbox = (v) => typeof v === "string" && v.length > 0 && (
+			v.startsWith("PUID:") || v.startsWith("SMTP:") || v.startsWith("OID:") || v.includes("@")
+		);
+		const looksLikePrefer = (v) => typeof v === "string" && v.length > 0 && /exchange\\.behavior/i.test(v);
 		const pick = (obj, keys) => {
 			if (!obj || typeof obj !== "object") return null;
 			for (const k of keys) {
@@ -74,6 +78,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 			if (src.sessionId && !dst.sessionId) dst.sessionId = src.sessionId;
 			if (src.anchorMailbox && !dst.anchorMailbox) dst.anchorMailbox = src.anchorMailbox;
 			if (src.tenantId && !dst.tenantId) dst.tenantId = src.tenantId;
+			if (src.prefer && !dst.prefer) dst.prefer = src.prefer;
 			return dst;
 		};
 		const fromObj = (obj) => {
@@ -81,10 +86,12 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 			const sessionId = pick(obj, ["sessionId", "SessionId", "owaSessionId", "OWASessionId"]);
 			const tenantId = pick(obj, ["tenantId", "TenantId"]);
 			const anchorMailbox = pick(obj, ["anchorMailbox", "AnchorMailbox", "primarySmtpAddress", "PrimarySmtpAddress"]);
+			const prefer = pick(obj, ["prefer", "Prefer"]);
 			const out = {};
 			if (sessionId && isGuid(sessionId)) out.sessionId = sessionId;
 			if (tenantId && isGuid(tenantId)) out.tenantId = tenantId;
 			if (anchorMailbox && typeof anchorMailbox === "string") out.anchorMailbox = anchorMailbox;
+			if (prefer && typeof prefer === "string" && looksLikePrefer(prefer)) out.prefer = prefer;
 			return Object.keys(out).length ? out : null;
 		};
 		const out = {};
@@ -105,11 +112,28 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		const scanStorage = (storage) => {
 			if (!storage) return;
 			for (const key of Object.keys(storage)) {
-				if (!/session|owa|tenant|anchor/i.test(key)) continue;
+				if (!/session|owa|tenant|anchor|prefer/i.test(key)) continue;
 				const raw = storage.getItem(key);
 				if (!raw) continue;
+
+				// Some sessions store anchor mailbox + prefer as plain strings.
+				if (!out.anchorMailbox && /anchor/i.test(key) && looksLikeAnchorMailbox(raw)) {
+					out.anchorMailbox = raw;
+				}
+				if (!out.prefer && /prefer/i.test(key) && looksLikePrefer(raw)) {
+					out.prefer = raw;
+				}
+
 				if (isGuid(raw)) {
-					merge(out, { sessionId: raw });
+					if (!out.tenantId && /tenant/i.test(key)) {
+						out.tenantId = raw;
+						continue;
+					}
+					if (!out.sessionId && /session/i.test(key)) {
+						out.sessionId = raw;
+						continue;
+					}
+					// Unknown GUID value; ignore.
 					continue;
 				}
 				try {
@@ -135,6 +159,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		SessionID     string `json:"sessionId"`
 		AnchorMailbox string `json:"anchorMailbox"`
 		TenantID      string `json:"tenantId"`
+		Prefer        string `json:"prefer"`
 	}
 	if err := json.Unmarshal([]byte(result.Value.JSON("", "")), &parsed); err != nil {
 		return SessionHeaders{}, err
@@ -144,6 +169,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		SessionID:     parsed.SessionID,
 		AnchorMailbox: parsed.AnchorMailbox,
 		TenantID:      parsed.TenantID,
+		Prefer:        parsed.Prefer,
 	}, nil
 }
 
@@ -490,39 +516,10 @@ func NavigateToOWA(page *rod.Page) error {
 
 // WaitForLogin waits for the user to complete login and OWA to load.
 func WaitForLogin(page *rod.Page, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	startupInterval := 3 * time.Second
-	lastStartupCheck := time.Time{}
-
-	for time.Now().Before(deadline) {
-		info, err := page.Info()
-		if err != nil {
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
-		// Check if we're on OWA mail page
-		if isOWAURL(info.URL) {
-			// Try to extract canary to confirm we're logged in
-			canary, _ := getCanaryFromCookies(page)
-			if canary == "" {
-				canary, _ = getCanaryFromPage(page)
-			}
-			if canary != "" {
-				return nil
-			}
-		}
-		if isOutlookHostURL(info.URL) && time.Since(lastStartupCheck) >= startupInterval {
-			if canary, err := getCanaryFromStartupData(page); err == nil && canary != "" {
-				return nil
-			}
-			lastStartupCheck = time.Now()
-		}
-
-		time.Sleep(500 * time.Millisecond)
+	if err := WaitForSessionValid(page, timeout); err != nil {
+		return fmt.Errorf("login timeout - user did not complete authentication: %w", err)
 	}
-
-	return errors.New("login timeout - user did not complete authentication")
+	return nil
 }
 
 // IsLoggedIn checks if the current page has valid OWA tokens.
@@ -549,7 +546,7 @@ func IsLoggedIn(page *rod.Page) bool {
 
 // EnsureLoggedIn checks if logged in and navigates to OWA if needed.
 func EnsureLoggedIn(page *rod.Page) error {
-	if IsLoggedIn(page) {
+	if IsSessionValid(page) {
 		return nil
 	}
 
@@ -563,7 +560,7 @@ func EnsureLoggedIn(page *rod.Page) error {
 	// Give it a moment to redirect/load
 	time.Sleep(2 * time.Second)
 
-	if !IsLoggedIn(page) {
+	if !IsSessionValid(page) {
 		return errors.New("not logged in - run 'auth login' first")
 	}
 
@@ -572,31 +569,7 @@ func EnsureLoggedIn(page *rod.Page) error {
 
 // WaitForLoggedIn waits up to timeout for a valid OWA session.
 func WaitForLoggedIn(page *rod.Page, timeout time.Duration) error {
-	if page == nil {
-		return errors.New("page is nil")
-	}
-	if timeout <= 0 {
-		return errors.New("timeout must be positive")
-	}
-
-	deadline := time.Now().Add(timeout)
-	startupInterval := 3 * time.Second
-	lastStartupCheck := time.Time{}
-	for time.Now().Before(deadline) {
-		if IsLoggedIn(page) {
-			return nil
-		}
-		info, err := page.Info()
-		if err == nil && isOutlookHostURL(info.URL) && time.Since(lastStartupCheck) >= startupInterval {
-			if canary, err := getCanaryFromStartupData(page); err == nil && canary != "" {
-				return nil
-			}
-			lastStartupCheck = time.Now()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	return errors.New("login timeout - not logged in")
+	return WaitForSessionValid(page, timeout)
 }
 
 // SetCanaryCookie ensures the canary is set as a request header cookie.

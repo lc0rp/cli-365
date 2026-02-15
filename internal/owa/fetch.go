@@ -28,6 +28,10 @@ type FetchResponse struct {
 	Body       json.RawMessage   `json:"body"`
 }
 
+// fetchFn exists to make action callers testable without a real browser/page.
+// Production uses Fetch; tests may stub this.
+var fetchFn = Fetch
+
 // Fetch executes an HTTP request in the page context using OWA session cookies.
 func Fetch(page *rod.Page, req FetchRequest) (*FetchResponse, error) {
 	if req.Method == "" {
@@ -251,6 +255,16 @@ func callOWAAction(page *rod.Page, tokens *Tokens, action string, body interface
 			resp, err = callOWAActionAtWithSource(page, refreshed, action, body, endpoint, reqSource)
 		}
 	}
+	if err == nil && resp != nil && resp.Status == 401 && tokens.Bearer != "" && tokens.Canary != "" {
+		// If a stale bearer token is present, OWA may 401 even though the canary cookie/header is valid.
+		// Best-effort retry with canary-only.
+		clone := *tokens
+		clone.Bearer = ""
+		if retry, rerr := callOWAActionAtWithSource(page, &clone, action, body, endpoint, reqSource); rerr == nil && retry != nil && retry.Status != 401 {
+			resp = retry
+			err = nil
+		}
+	}
 	if err == nil && resp != nil && resp.Status == 404 {
 		if alt := swapServiceSVCPath(endpoint); alt != "" && alt != endpoint {
 			if retry, rerr := callOWAActionAtWithSource(page, tokens, action, body, alt, reqSource); rerr == nil && retry != nil {
@@ -293,7 +307,9 @@ func callOWAActionAtWithSource(page *rod.Page, tokens *Tokens, action string, bo
 	addURLPostDataHeader(req.Headers, body)
 	if tokens.Bearer != "" {
 		req.Headers["Authorization"] = tokens.Bearer
-	} else if tokens.Canary != "" {
+	}
+	// OWA often sends both Authorization and X-OWA-CANARY; some endpoints behave poorly without the canary header.
+	if tokens.Canary != "" {
 		req.Headers["X-OWA-CANARY"] = tokens.Canary
 	}
 	if !tokens.Session.IsZero() {
@@ -301,7 +317,7 @@ func callOWAActionAtWithSource(page *rod.Page, tokens *Tokens, action string, bo
 	}
 	applySessionHeaders(req.Headers)
 	applyPreferHeader(req.Headers)
-	resp, err := Fetch(page, req)
+	resp, err := fetchFn(page, req)
 	if err == nil {
 		SessionFeatures().MaybeDisableFromResponse(action, resp)
 	}
@@ -372,14 +388,14 @@ func CallOWAActionWithBearer(page *rod.Page, bearer string, action string, body 
 	}
 
 	applySessionHeaders(req.Headers)
-	resp, err := Fetch(page, req)
+	resp, err := fetchFn(page, req)
 	if err == nil {
 		SessionFeatures().MaybeDisableFromResponse(action, resp)
 	}
 	if err == nil && resp != nil && resp.Status == 404 {
 		if alt := swapServiceSVCPath(endpoint); alt != "" && alt != endpoint {
 			req.URL = alt
-			if retry, rerr := Fetch(page, req); rerr == nil && retry != nil {
+			if retry, rerr := fetchFn(page, req); rerr == nil && retry != nil {
 				resp = retry
 			}
 		}
@@ -396,11 +412,23 @@ func applySessionHeaders(headers map[string]string) {
 		headers["X-OWA-SessionId"] = session.SessionID
 	}
 	if session.AnchorMailbox != "" {
-		headers["X-AnchorMailbox"] = session.AnchorMailbox
+		headers["X-AnchorMailbox"] = normalizeAnchorMailbox(session.AnchorMailbox)
 	}
 	if session.TenantID != "" {
 		headers["X-TenantId"] = session.TenantID
 	}
+}
+
+func normalizeAnchorMailbox(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return ""
+	}
+	// OWA prefixes plain addresses; keep existing routing hints (PUID:/SMTP:/OID:/etc).
+	if strings.Contains(v, "@") && !strings.Contains(v, ":") {
+		return "SMTP:" + v
+	}
+	return v
 }
 
 func applyPreferHeader(headers map[string]string) {
