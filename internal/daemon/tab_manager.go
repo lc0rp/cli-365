@@ -4,8 +4,10 @@ import (
 	"strings"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 
 	"github.com/lc0rp/cli-365/internal/browser"
+	"github.com/lc0rp/cli-365/internal/owa"
 )
 
 type tabSnapshot struct {
@@ -160,7 +162,8 @@ func (s *Server) maintainPrimaryOWATab() {
 	}
 
 	snapshots := make([]tabSnapshot, 0, len(pages))
-	pageByID := make(map[string]interface{ Close() error }, len(pages))
+	urlByID := make(map[string]string, len(pages))
+	pageByID := make(map[string]*rod.Page, len(pages))
 	for _, p := range pages {
 		info, err := p.Info()
 		if err != nil || info == nil {
@@ -174,6 +177,7 @@ func (s *Server) maintainPrimaryOWATab() {
 			ID:  id,
 			URL: info.URL,
 		})
+		urlByID[id] = info.URL
 		pageByID[id] = p
 	}
 
@@ -183,7 +187,42 @@ func (s *Server) maintainPrimaryOWATab() {
 			_ = p.Close()
 		}
 	}
-	s.setPrimaryTabID(plan.PrimaryID)
+
+	primaryID := plan.PrimaryID
+	if primaryID == "" {
+		for _, snapshot := range snapshots {
+			if isAboutBlankURL(snapshot.URL) {
+				primaryID = snapshot.ID
+				break
+			}
+		}
+	}
+
+	var primaryPage *rod.Page
+	if primaryID != "" {
+		primaryPage = pageByID[primaryID]
+	}
+
+	if primaryPage == nil {
+		newPage, err := b.Page(proto.TargetCreateTarget{URL: "about:blank"})
+		if err == nil {
+			primaryPage = newPage
+			if info, infoErr := newPage.Info(); infoErr == nil && info != nil {
+				primaryID = strings.TrimSpace(string(info.TargetID))
+				urlByID[primaryID] = info.URL
+			}
+		}
+	}
+
+	if primaryPage != nil {
+		if !isOWAURLForDaemon(urlByID[primaryID]) {
+			_ = owa.NavigateToOWA(primaryPage)
+		}
+		if info, err := primaryPage.Info(); err == nil && info != nil {
+			primaryID = strings.TrimSpace(string(info.TargetID))
+		}
+	}
+	s.setPrimaryTabID(primaryID)
 }
 
 func isAboutBlankURL(raw string) bool {

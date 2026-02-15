@@ -467,6 +467,11 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 	var result ExecResult
 	retriedAfterAuthRecovery := false
 	readRetries := 0
+	maintainPrimary := shouldMaintainPrimaryTab(task.req.CommandPath, task.argv)
+
+	if maintainPrimary {
+		s.maintainPrimaryOWATab()
+	}
 
 	for {
 		remaining := time.Until(deadline)
@@ -542,7 +547,7 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 
 	resp.Stdout = limitResponseOutput(resp.Stdout, s.opts.MaxResponseBytes)
 	resp.Stderr = limitResponseOutput(resp.Stderr, s.opts.MaxResponseBytes)
-	if shouldMaintainPrimaryTab(task.req.CommandPath, task.argv) {
+	if maintainPrimary {
 		s.maintainPrimaryOWATab()
 	}
 	s.logEvent("info", "request_complete", map[string]interface{}{
