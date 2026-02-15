@@ -1,6 +1,6 @@
 # Binaries
-cli-365
-outlook-browser-cli
+/cli-365
+/outlook-browser-cli
 
 # IDE
 .idea/
