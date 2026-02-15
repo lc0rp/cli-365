@@ -95,7 +95,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Unit: `CDP_PORT_MISMATCH` path.
 - [x] Integration: first `--daemon` call auto-starts daemon.
 - [x] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse + repeated `--daemon browser start` primary-tab reuse integration test; host prerequisites required, test auto-skips when unavailable)
-- [ ] Integration: browser crash recovery.
+- [x] Integration: browser crash recovery. (guarded integration test added; auto-skips when browser host prerequisites unavailable)
 - [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
 - [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
 - [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (deterministic parity expanded to include `auth status`, `browser status` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)

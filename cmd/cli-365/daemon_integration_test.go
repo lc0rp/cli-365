@@ -168,6 +168,89 @@ func TestDaemonBrowserStartPrimaryTabReuseIntegration(t *testing.T) {
 	}
 }
 
+func TestDaemonBrowserCrashRecoveryIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := buildCLIBinary(t)
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", homeDir)
+
+	run := func(args ...string) binaryResult {
+		return runBinary(t, binPath, stateHome, homeDir, args...)
+	}
+
+	defer func() {
+		_ = run("daemon", "stop")
+		_ = run("browser", "stop")
+	}()
+
+	first := run("--daemon", "browser", "start")
+	if first.exitCode != 0 {
+		if shouldSkipBrowserIntegration(first.stderr) {
+			t.Skipf("browser integration prerequisites unavailable: %s", strings.TrimSpace(first.stderr))
+		}
+		t.Fatalf("first --daemon browser start exit=%d stderr=%q", first.exitCode, first.stderr)
+	}
+
+	status1 := run("--json", "browser", "status")
+	if status1.exitCode != 0 {
+		t.Fatalf("browser status exit=%d stderr=%q", status1.exitCode, status1.stderr)
+	}
+	var b1 struct {
+		Running    bool   `json:"running"`
+		PID        int    `json:"pid"`
+		WSEndpoint string `json:"ws_endpoint"`
+	}
+	if err := json.Unmarshal([]byte(status1.stdout), &b1); err != nil {
+		t.Fatalf("parse browser status1: %v (stdout=%q)", err, status1.stdout)
+	}
+	if !b1.Running {
+		t.Fatal("browser status1 running=false, want true")
+	}
+	if b1.PID <= 0 {
+		t.Skipf("browser status1 pid unavailable (pid=%d), skipping crash-recovery integration", b1.PID)
+	}
+
+	proc, err := os.FindProcess(b1.PID)
+	if err != nil {
+		t.Fatalf("FindProcess(%d): %v", b1.PID, err)
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatalf("kill browser pid %d: %v", b1.PID, err)
+	}
+
+	second := run("--daemon", "browser", "start")
+	if second.exitCode != 0 {
+		t.Fatalf("second --daemon browser start exit=%d stderr=%q", second.exitCode, second.stderr)
+	}
+
+	status2 := run("--json", "browser", "status")
+	if status2.exitCode != 0 {
+		t.Fatalf("browser status2 exit=%d stderr=%q", status2.exitCode, status2.stderr)
+	}
+	var b2 struct {
+		Running    bool   `json:"running"`
+		PID        int    `json:"pid"`
+		WSEndpoint string `json:"ws_endpoint"`
+	}
+	if err := json.Unmarshal([]byte(status2.stdout), &b2); err != nil {
+		t.Fatalf("parse browser status2: %v (stdout=%q)", err, status2.stdout)
+	}
+	if !b2.Running {
+		t.Fatal("browser status2 running=false, want true")
+	}
+	if b2.PID <= 0 && b2.WSEndpoint == "" {
+		t.Fatalf("browser status2 missing pid/ws endpoint: %+v", b2)
+	}
+	if b2.PID == b1.PID && b2.WSEndpoint == b1.WSEndpoint {
+		t.Fatalf("expected recovered browser identity to change after crash, got same pid=%d ws=%q", b2.PID, b2.WSEndpoint)
+	}
+}
+
 func buildCLIBinary(t *testing.T) string {
 	t.Helper()
 

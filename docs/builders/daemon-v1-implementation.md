@@ -64,7 +64,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use (extra OWA/about:blank cleanup baseline).
 - [x] Add integration test for repeated daemon browser start/tab reuse behavior (guarded skip when browser host prerequisites are unavailable).
-- [ ] Add integration test for crash-recovery.
+- [x] Add integration test for crash-recovery. (guarded skip when browser host prerequisites unavailable)
 
 ### Phase D: Auth recovery + notifications
 
