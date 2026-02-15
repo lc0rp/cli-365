@@ -19,7 +19,8 @@ read_when: Working in cli-365 code or planning daemon-mode implementation.
 - `docs/builders/daemon-v1-implementation.md` (execution checklist for upcoming implementation)
 - `docs/builders/specs/mvp-spec.md` (MVP architecture context)
 - `docs/builders/status/mvp-status.md` (current capability status)
-- `docs/builders/backlog/TODO.md` (active execution backlog)
+- `docs/builders/backlog/daemon-v1-todo.md` (daemon-v1 epics/tasks)
+- `docs/builders/backlog/mvp-todo.md` (legacy/current MVP defects)
 
 ## Before coding daemon v1
 

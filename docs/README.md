@@ -19,8 +19,8 @@ Audience-first routing for repository docs. Keep pages intent-pure:
 
 ## Read when
 
-- Planning daemon implementation: `docs/builders/specs/daemon-v1.md`, `docs/builders/daemon-v1-implementation.md`.
-- Verifying current CLI behavior: `README.md`, `docs/builders/status/mvp-status.md`, `docs/builders/specs/mvp-spec.md`, `docs/builders/backlog/TODO.md`.
+- Planning daemon implementation: `docs/builders/specs/daemon-v1.md`, `docs/builders/daemon-v1-implementation.md`, `docs/builders/backlog/daemon-v1-todo.md`.
+- Verifying current CLI behavior: `README.md`, `docs/builders/status/mvp-status.md`, `docs/builders/specs/mvp-spec.md`, `docs/builders/backlog/mvp-todo.md`.
 
 ## Audience hubs
 
