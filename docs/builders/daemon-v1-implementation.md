@@ -11,7 +11,7 @@ read_when: Starting daemon mode implementation work.
 # Implement daemon mode v1
 
 This page translates `docs/builders/specs/daemon-v1.md` into coding order.  
-Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete, Phase D auth coordinator complete at unit level, Phase F retry/no-replay + redacted logging + graceful stop queue-drain baseline complete)
+Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete, Phase D auth coordinator complete at unit level, Phase F retry/no-replay + redacted logging + graceful stop queue-drain + managed-browser cleanup complete)
 
 ## Scope
 
@@ -93,7 +93,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Redact tokens/canary in all logs.
 - [x] Add payload size limits and command table validation.
 - [x] Bound in-memory response buffering for large outputs.
-- [x] Graceful stop with queue drain-fail policy for pending requests (browser cleanup still pending browser/session manager work).
+- [x] Graceful stop with queue drain-fail policy for pending requests + stop cleanup for managed browser/tab state (cleanup only stops browser when daemon `state_dir` matches runtime state parent).
 - [ ] Complete contract tests to match non-daemon command semantics. (deterministic parity currently covers `help`, unknown command, missing help topic, `auth status`, `browser status` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)
 
 ## Test gate before merge

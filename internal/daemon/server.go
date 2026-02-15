@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lc0rp/cli-365/internal/browser"
+	"github.com/lc0rp/cli-365/internal/paths"
 	"github.com/lc0rp/cli-365/internal/security"
 )
 
@@ -59,6 +61,8 @@ type Server struct {
 	tabMu        sync.Mutex
 	primaryTabID string
 	tabConn      *tabBrowserConn
+
+	stopCleanup func() error
 }
 
 type queuedExec struct {
@@ -91,6 +95,7 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.notifyAuth = defaultNotifyAuth(opts.NotifyProvider, opts.NotifyOpenClawCmd, opts.NotifyChannel, opts.NotifyTarget)
 	srv.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	srv.logWriter = io.Discard
+	srv.stopCleanup = srv.defaultStopCleanup
 	return srv
 }
 
@@ -154,6 +159,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 	defer func() {
 		s.requestStop()
+		if s.stopCleanup != nil {
+			if err := s.stopCleanup(); err != nil {
+				s.logEvent("warn", "daemon_stop_cleanup_error", map[string]interface{}{
+					"error": err.Error(),
+				})
+			}
+		}
 		_ = os.Remove(s.opts.SocketPath)
 		_ = releaseFileLock(s.opts.LockPath, s.lockFile)
 		_ = s.writeStatus(Status{
@@ -752,6 +764,29 @@ func hasReadonlyFlag(argv []string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) defaultStopCleanup() error {
+	s.resetTabBrowser()
+	if !s.shouldCleanupManagedBrowser() {
+		return nil
+	}
+	err := browser.Stop()
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "no managed browser to stop") {
+		return nil
+	}
+	return err
+}
+
+func (s *Server) shouldCleanupManagedBrowser() bool {
+	runtimeDir := filepath.Dir(paths.RuntimePath())
+	return filepath.Clean(runtimeDir) == filepath.Clean(s.opts.StateDir)
 }
 
 func (s *Server) checkDuplicateWrite(commandPath string, argv []string) (string, string) {
