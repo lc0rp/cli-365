@@ -71,6 +71,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Reject new work while paused (`AUTH_PAUSED`).
 - [x] Trigger secure-input command + OpenClaw CLI notification.
 - [x] Timeout fan-out failure (`AUTH_TIMEOUT`) after 5m default.
+- [x] Add daemon IPC integration tests for paused/timeout auth recovery responses.
 
 ### Phase E: Coalescing + flood controls
 

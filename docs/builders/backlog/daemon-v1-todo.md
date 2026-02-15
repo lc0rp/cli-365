@@ -96,8 +96,8 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Integration: first `--daemon` call auto-starts daemon.
 - [ ] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse covered; browser/tab reuse pending)
 - [ ] Integration: browser crash recovery.
-- [ ] Integration: auth-required triggers pause + secure-input + notifier.
-- [ ] Integration: auth timeout fails pending requests with stable error codes.
+- [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
+- [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
 - [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (baseline parity tests cover `help`, unknown command, missing help topic)
 - [ ] Contract: stable daemon error codes are emitted (`QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
 
