@@ -133,6 +133,22 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 			name: "calendar help",
 			argv: []string{"help", "calendar"},
 		},
+		{
+			name: "auth help",
+			argv: []string{"help", "auth"},
+		},
+		{
+			name: "browser help",
+			argv: []string{"help", "browser"},
+		},
+		{
+			name: "daemon help",
+			argv: []string{"help", "daemon"},
+		},
+		{
+			name: "debug help",
+			argv: []string{"help", "debug"},
+		},
 	}
 
 	for _, tc := range cases {
