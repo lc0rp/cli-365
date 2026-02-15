@@ -42,6 +42,11 @@ It runs on Linux + macOS and executes:
 - `go test ./internal/daemon -count=1`
 - `go test ./cmd/cli-365 -count=1 -run 'TestDaemonAutoStartAndReuseIntegration|TestDaemonInProcessDispatchParity|TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens'`
 
+Workflow observability:
+
+- Publishes a job summary per OS with package-level pass lines.
+- Uploads raw logs as artifact: `daemon-smoke-logs-<os>`.
+
 ## Close criteria
 
 Mark backlog item done when all are true:

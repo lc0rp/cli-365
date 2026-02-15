@@ -28,9 +28,38 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Run internal daemon tests
+        env:
+          GOCACHE: ${{ runner.temp }}/gocache
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/ci
+          go test ./internal/daemon -count=1 | tee .tmp/ci/internal-daemon.log
+
       - name: Run daemon deterministic parity/e2e smoke tests
         env:
           GOCACHE: ${{ runner.temp }}/gocache
         run: |
-          go test ./internal/daemon -count=1
-          go test ./cmd/cli-365 -count=1 -run 'TestDaemonAutoStartAndReuseIntegration|TestDaemonInProcessDispatchParity|TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens'
+          set -euo pipefail
+          mkdir -p .tmp/ci
+          go test ./cmd/cli-365 -count=1 -run 'TestDaemonAutoStartAndReuseIntegration|TestDaemonInProcessDispatchParity|TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens' | tee .tmp/ci/cli-daemon-smoke.log
+
+      - name: Publish daemon smoke summary
+        if: always()
+        run: |
+          {
+            echo "### Daemon smoke summary (${{ matrix.os }})"
+            echo
+            echo "- internal/daemon:"
+            grep -E '^ok\s+github.com/lc0rp/cli-365/internal/daemon' .tmp/ci/internal-daemon.log || true
+            echo "- cmd/cli-365 deterministic smoke:"
+            grep -E '^ok\s+github.com/lc0rp/cli-365/cmd/cli-365' .tmp/ci/cli-daemon-smoke.log || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload daemon smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daemon-smoke-logs-${{ matrix.os }}
+          path: .tmp/ci/*.log
+          if-no-files-found: warn
