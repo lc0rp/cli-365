@@ -181,3 +181,21 @@ func TestExtractMessagesFromResponse_Empty(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestBuildGetFolderRequest(t *testing.T) {
+	req := buildGetFolderRequest("inbox")
+	if req["__type"] != "GetFolderRequest:#Exchange" {
+		t.Fatalf("__type = %v", req["__type"])
+	}
+	shape := req["FolderShape"].(map[string]interface{})
+	if shape["BaseShape"] != "IdOnly" {
+		t.Fatalf("BaseShape = %v", shape["BaseShape"])
+	}
+	ids := req["FolderIds"].([]map[string]interface{})
+	if got := ids[0]["__type"]; got != "DistinguishedFolderId:#Exchange" {
+		t.Fatalf("FolderIds[0].__type = %v", got)
+	}
+	if got := ids[0]["Id"]; got != "inbox" {
+		t.Fatalf("FolderIds[0].Id = %v", got)
+	}
+}

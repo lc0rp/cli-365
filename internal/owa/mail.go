@@ -164,15 +164,7 @@ func resolveFolderID(page *rod.Page, tokens *Tokens, distinguished string) (stri
 		return "", errors.New("page not initialized")
 	}
 
-	body := map[string]interface{}{
-		"__type": "GetFolderRequest:#Exchange",
-		"FolderShape": map[string]interface{}{
-			"BaseShape": "IdOnly",
-		},
-		"FolderIds": []map[string]interface{}{
-			{"__type": "DistinguishedFolderId:#Exchange", "Id": distinguished},
-		},
-	}
+	body := buildGetFolderRequest(distinguished)
 
 	resp, err := CallOWAAction(page, tokens, "GetFolder", body)
 	if err != nil {
@@ -198,6 +190,18 @@ func resolveFolderID(page *rod.Page, tokens *Tokens, distinguished string) (stri
 		return "", nil
 	}
 	return wrapper.Body.Folders[0].FolderId.Id, nil
+}
+
+func buildGetFolderRequest(distinguished string) map[string]interface{} {
+	return map[string]interface{}{
+		"__type": "GetFolderRequest:#Exchange",
+		"FolderShape": map[string]interface{}{
+			"BaseShape": "IdOnly",
+		},
+		"FolderIds": []map[string]interface{}{
+			{"__type": "DistinguishedFolderId:#Exchange", "Id": distinguished},
+		},
+	}
 }
 
 func resolveFolderInput(page *rod.Page, tokens *Tokens, input string) (string, error) {
@@ -453,10 +457,7 @@ func formatOWAErrorDetails(resp *FetchResponse) string {
 	if info.Message != "" {
 		parts = append(parts, info.Message)
 	}
-	body := strings.TrimSpace(string(resp.Body))
-	if body != "" && len(body) > 2048 {
-		body = body[:2048] + "...(truncated)"
-	}
+	body := summarizeOWAErrorBody(resp.Body)
 	if body != "" && (info.Code != "" || info.Exception != "" || info.Message != "") {
 		parts = append(parts, "body="+body)
 	}
@@ -470,6 +471,42 @@ func formatOWAErrorDetails(resp *FetchResponse) string {
 		return "unknown error"
 	}
 	return strings.Join(parts, " | ")
+}
+
+func summarizeOWAErrorBody(body json.RawMessage) string {
+	if len(body) == 0 {
+		return ""
+	}
+
+	// If the response body is a JSON string, prefer the decoded string value.
+	// Some error responses are binary/garbage (often NULs) and should not be printed verbatim.
+	var decoded string
+	if err := json.Unmarshal(body, &decoded); err == nil {
+		if decoded == "" {
+			return ""
+		}
+		nul := strings.Count(decoded, "\x00")
+		if nul > 0 {
+			return fmt.Sprintf("<body: string len=%d nul=%d>", len(decoded), nul)
+		}
+		trimmed := strings.TrimSpace(decoded)
+		if trimmed == "" {
+			return ""
+		}
+		if len(trimmed) > 2048 {
+			trimmed = trimmed[:2048] + "...(truncated)"
+		}
+		return trimmed
+	}
+
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	if len(trimmed) > 2048 {
+		trimmed = trimmed[:2048] + "...(truncated)"
+	}
+	return trimmed
 }
 
 // DeleteDraft deletes a draft message.

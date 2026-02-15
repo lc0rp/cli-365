@@ -62,6 +62,10 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 	result, err := page.Eval(`() => {
 		const isGuid = (v) => typeof v === "string" && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v);
+		const looksLikeAnchorMailbox = (v) => typeof v === "string" && v.length > 0 && (
+			v.startsWith("PUID:") || v.startsWith("SMTP:") || v.startsWith("OID:") || v.includes("@")
+		);
+		const looksLikePrefer = (v) => typeof v === "string" && v.length > 0 && /exchange\\.behavior/i.test(v);
 		const pick = (obj, keys) => {
 			if (!obj || typeof obj !== "object") return null;
 			for (const k of keys) {
@@ -74,6 +78,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 			if (src.sessionId && !dst.sessionId) dst.sessionId = src.sessionId;
 			if (src.anchorMailbox && !dst.anchorMailbox) dst.anchorMailbox = src.anchorMailbox;
 			if (src.tenantId && !dst.tenantId) dst.tenantId = src.tenantId;
+			if (src.prefer && !dst.prefer) dst.prefer = src.prefer;
 			return dst;
 		};
 		const fromObj = (obj) => {
@@ -81,10 +86,12 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 			const sessionId = pick(obj, ["sessionId", "SessionId", "owaSessionId", "OWASessionId"]);
 			const tenantId = pick(obj, ["tenantId", "TenantId"]);
 			const anchorMailbox = pick(obj, ["anchorMailbox", "AnchorMailbox", "primarySmtpAddress", "PrimarySmtpAddress"]);
+			const prefer = pick(obj, ["prefer", "Prefer"]);
 			const out = {};
 			if (sessionId && isGuid(sessionId)) out.sessionId = sessionId;
 			if (tenantId && isGuid(tenantId)) out.tenantId = tenantId;
 			if (anchorMailbox && typeof anchorMailbox === "string") out.anchorMailbox = anchorMailbox;
+			if (prefer && typeof prefer === "string" && looksLikePrefer(prefer)) out.prefer = prefer;
 			return Object.keys(out).length ? out : null;
 		};
 		const out = {};
@@ -105,11 +112,28 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		const scanStorage = (storage) => {
 			if (!storage) return;
 			for (const key of Object.keys(storage)) {
-				if (!/session|owa|tenant|anchor/i.test(key)) continue;
+				if (!/session|owa|tenant|anchor|prefer/i.test(key)) continue;
 				const raw = storage.getItem(key);
 				if (!raw) continue;
+
+				// Some sessions store anchor mailbox + prefer as plain strings.
+				if (!out.anchorMailbox && /anchor/i.test(key) && looksLikeAnchorMailbox(raw)) {
+					out.anchorMailbox = raw;
+				}
+				if (!out.prefer && /prefer/i.test(key) && looksLikePrefer(raw)) {
+					out.prefer = raw;
+				}
+
 				if (isGuid(raw)) {
-					merge(out, { sessionId: raw });
+					if (!out.tenantId && /tenant/i.test(key)) {
+						out.tenantId = raw;
+						continue;
+					}
+					if (!out.sessionId && /session/i.test(key)) {
+						out.sessionId = raw;
+						continue;
+					}
+					// Unknown GUID value; ignore.
 					continue;
 				}
 				try {
@@ -135,6 +159,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		SessionID     string `json:"sessionId"`
 		AnchorMailbox string `json:"anchorMailbox"`
 		TenantID      string `json:"tenantId"`
+		Prefer        string `json:"prefer"`
 	}
 	if err := json.Unmarshal([]byte(result.Value.JSON("", "")), &parsed); err != nil {
 		return SessionHeaders{}, err
@@ -144,6 +169,7 @@ func getSessionHeadersFromPage(page *rod.Page) (SessionHeaders, error) {
 		SessionID:     parsed.SessionID,
 		AnchorMailbox: parsed.AnchorMailbox,
 		TenantID:      parsed.TenantID,
+		Prefer:        parsed.Prefer,
 	}, nil
 }
 

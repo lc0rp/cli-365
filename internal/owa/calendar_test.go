@@ -124,3 +124,12 @@ func TestBuildUpdateCalendarEventRequest(t *testing.T) {
 		t.Fatalf("unexpected type: %v", req["__type"])
 	}
 }
+
+func TestCalendarActionOptions(t *testing.T) {
+	if calendarActionOptions.App != "Mail" {
+		t.Fatalf("calendarActionOptions.App = %q, want %q", calendarActionOptions.App, "Mail")
+	}
+	if calendarActionOptions.ReqSource != "Mail" {
+		t.Fatalf("calendarActionOptions.ReqSource = %q, want %q", calendarActionOptions.ReqSource, "Mail")
+	}
+}
