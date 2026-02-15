@@ -62,13 +62,15 @@ type Server struct {
 	primaryTabID string
 	tabConn      *tabBrowserConn
 
-	stopCleanup      func() error
-	tokenLoader      tokenLoaderFunc
-	tokenSaver       tokenSaverFunc
-	tokenRefresher   tokenRefresherFunc
-	sessionProbe     sessionProbeFunc
-	tokenRefreshLead time.Duration
-	lookupPath       lookupPathFunc
+	stopCleanup         func() error
+	tokenLoader         tokenLoaderFunc
+	tokenSaver          tokenSaverFunc
+	tokenRefresher      tokenRefresherFunc
+	sessionProbe        sessionProbeFunc
+	tokenRefreshLead    time.Duration
+	lookupPath          lookupPathFunc
+	maintenanceInterval time.Duration
+	maintainPrimaryFn   func()
 }
 
 type queuedExec struct {
@@ -108,6 +110,8 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.sessionProbe = srv.defaultSessionProbe
 	srv.tokenRefreshLead = defaultTokenRefreshLead
 	srv.lookupPath = defaultLookupPath
+	srv.maintenanceInterval = defaultSessionMaintenanceInterval
+	srv.maintainPrimaryFn = srv.maintainPrimaryOWATab
 	return srv
 }
 
@@ -200,12 +204,18 @@ func (s *Server) Run(ctx context.Context) error {
 		defer close(workerDone)
 		s.runWorker(runCtx)
 	}()
+	maintenanceDone := make(chan struct{})
+	go func() {
+		defer close(maintenanceDone)
+		s.runSessionMaintenance(runCtx)
+	}()
 
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			if runCtx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				<-workerDone
+				<-maintenanceDone
 				return nil
 			}
 			continue
@@ -496,7 +506,7 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 	resetPrimary := shouldResetPrimaryTab(task.req.CommandPath, task.argv)
 
 	if maintainPrimary {
-		s.maintainPrimaryOWATab()
+		s.runPrimaryMaintenance()
 	}
 	if !s.ensureSessionReady(parent, deadline, task.req.CommandPath, task.argv) {
 		end := time.Now().UTC()
@@ -580,7 +590,7 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 	resp.Stdout = limitResponseOutput(resp.Stdout, s.opts.MaxResponseBytes)
 	resp.Stderr = limitResponseOutput(resp.Stderr, s.opts.MaxResponseBytes)
 	if maintainPrimary {
-		s.maintainPrimaryOWATab()
+		s.runPrimaryMaintenance()
 	}
 	if resp.OK && resetPrimary {
 		s.resetTabBrowser()

@@ -248,7 +248,7 @@ func (s *Server) tryRecoverBrowserForSession(parent context.Context, deadline ti
 
 	result := s.execFn(ctx, []string{"browser", "start"}, timeout)
 	if result.ExitCode == 0 && result.Err == nil {
-		s.maintainPrimaryOWATab()
+		s.runPrimaryMaintenance()
 		s.logEvent("info", "session_browser_recovered", map[string]interface{}{
 			"timeout_ms": timeout.Milliseconds(),
 		})
