@@ -55,6 +55,9 @@ type Server struct {
 
 	logMu     sync.Mutex
 	logWriter io.Writer
+
+	tabMu        sync.Mutex
+	primaryTabID string
 }
 
 type queuedExec struct {
@@ -538,6 +541,9 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 
 	resp.Stdout = limitResponseOutput(resp.Stdout, s.opts.MaxResponseBytes)
 	resp.Stderr = limitResponseOutput(resp.Stderr, s.opts.MaxResponseBytes)
+	if shouldMaintainPrimaryTab(task.req.CommandPath, task.argv) {
+		s.maintainPrimaryOWATab()
+	}
 	s.logEvent("info", "request_complete", map[string]interface{}{
 		"request_id":    task.req.RequestID,
 		"command_path":  task.req.CommandPath,

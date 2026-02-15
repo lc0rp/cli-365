@@ -57,11 +57,12 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 
 ### Phase C: Browser ownership + CDP consistency
 
-- [ ] Daemon owns browser/tab/session state.
-- [ ] Reuse one primary OWA tab.
+- [ ] Daemon owns browser/tab/session state. (baseline primary-tab manager added in daemon worker path)
+- [ ] Reuse one primary OWA tab. (daemon now selects/tracks a primary OWA tab and closes extra OWA/about:blank tabs after browser-affecting commands)
 - [ ] Recover tab/browser crash paths.
 - [x] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
+- [x] Ensure temporary pages are closed after use (extra OWA/about:blank cleanup baseline).
 - [ ] Add integration test for crash-recovery.
 
 ### Phase D: Auth recovery + notifications
