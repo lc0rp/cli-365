@@ -45,7 +45,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 ### Phase C: browser/session ownership
 
-- [ ] Daemon owns one browser + one primary OWA tab. (baseline primary-tab selection + extra OWA/about:blank cleanup + periodic maintenance loop added; full ownership/recovery still pending)
+- [x] Daemon owns one browser + one primary OWA tab. (daemon tracks primary tab, closes extras, runs periodic maintenance between requests, and ties session preflight/recovery to the managed browser runtime)
 - [ ] Add health/recovery for closed tab and dead browser. (best-effort tab recovery added: reuse blank/create tab + navigate OWA, guarded crash-recovery integration test added, and session preflight now attempts in-process `browser start` recovery when probe reports unavailable; full cross-host coverage still pending)
 - [x] Enforce daemon/client `--cdp-port` consistency.
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.

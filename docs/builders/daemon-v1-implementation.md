@@ -57,7 +57,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 
 ### Phase C: Browser ownership + CDP consistency
 
-- [ ] Daemon owns browser/tab/session state. (baseline primary-tab manager added in daemon worker path; periodic maintenance loop now enforces primary-tab upkeep between requests; `browser start` participates in tab maintenance and `browser stop` resets cached tab/browser handle)
+- [x] Daemon owns browser/tab/session state. (primary-tab manager in daemon worker path + periodic maintenance between requests; session preflight/recovery is scoped to managed runtime; `browser start` participates in tab maintenance and `browser stop` resets cached tab/browser handle)
 - [ ] Reuse one primary OWA tab. (daemon now selects/tracks a primary OWA tab and closes extra OWA/about:blank tabs after browser-affecting commands)
 - [ ] Recover tab/browser crash paths. (baseline tab recovery added: reuse blank/create tab + navigate to OWA when no OWA tab found; when session probe reports unavailable, daemon now attempts in-process `browser start` recovery then re-probes before auth recovery fallback)
 - [x] Add token/session preflight manager: parse JWT `exp`, proactively refresh near-expiry token cache, probe session validity before `mail|calendar`, and trigger auth recovery when probe fails.
