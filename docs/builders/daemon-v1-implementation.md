@@ -58,14 +58,15 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 ### Phase C: Browser ownership + CDP consistency
 
 - [x] Daemon owns browser/tab/session state. (primary-tab manager in daemon worker path + periodic maintenance between requests; session preflight/recovery is scoped to managed runtime; `browser start` participates in tab maintenance and `browser stop` resets cached tab/browser handle)
-- [ ] Reuse one primary OWA tab. (daemon now selects/tracks a primary OWA tab and closes extra OWA/about:blank tabs after browser-affecting commands)
-- [ ] Recover tab/browser crash paths. (baseline tab recovery added: reuse blank/create tab + navigate to OWA when no OWA tab found; when session probe reports unavailable, daemon now attempts in-process `browser start` recovery then re-probes before auth recovery fallback)
+- [x] Reuse one primary OWA tab. (daemon selects/tracks a primary OWA tab, closes extra OWA/about:blank tabs after browser-affecting commands, and has guarded integration coverage for repeat-start and closed-tab recovery)
+- [x] Recover tab/browser crash paths. (daemon reuses blank/create tab + navigate to OWA when no OWA tab found, runs guarded crash-recovery integration coverage, and session probe fallback attempts in-process `browser start` recovery before auth recovery)
 - [x] Add token/session preflight manager: parse JWT `exp`, proactively refresh near-expiry token cache, probe session validity before `mail|calendar`, and trigger auth recovery when probe fails.
 - [x] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use (extra OWA/about:blank cleanup baseline).
 - [x] Add integration test for repeated daemon browser start/tab reuse behavior (guarded skip when browser host prerequisites are unavailable).
 - [x] Add integration test for crash-recovery. (guarded skip when browser host prerequisites unavailable)
+- [x] Add integration test for closed primary-tab recovery. (guarded skip when browser host prerequisites unavailable)
 
 ### Phase D: Auth recovery + notifications
 

@@ -46,7 +46,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 ### Phase C: browser/session ownership
 
 - [x] Daemon owns one browser + one primary OWA tab. (daemon tracks primary tab, closes extras, runs periodic maintenance between requests, and ties session preflight/recovery to the managed browser runtime)
-- [ ] Add health/recovery for closed tab and dead browser. (best-effort tab recovery added: reuse blank/create tab + navigate OWA, guarded crash-recovery integration test added, and session preflight now attempts in-process `browser start` recovery when probe reports unavailable; full cross-host coverage still pending)
+- [x] Add health/recovery for closed tab and dead browser. (daemon recovers closed-tab state on subsequent browser-managed commands, has guarded crash-recovery integration coverage, and session preflight attempts in-process `browser start` recovery when probe reports unavailable)
 - [x] Enforce daemon/client `--cdp-port` consistency.
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use.
@@ -96,6 +96,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Integration: first `--daemon` call auto-starts daemon.
 - [x] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse + repeated `--daemon browser start` primary-tab reuse integration test; host prerequisites required, test auto-skips when unavailable)
 - [x] Integration: browser crash recovery. (guarded integration test added; auto-skips when browser host prerequisites unavailable)
+- [x] Integration: closed primary-tab recovery. (guarded integration test closes all OWA tabs then verifies daemon recreates a single primary tab)
 - [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
 - [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
 - [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (deterministic parity expanded to include `auth status` text/json in empty+cached-token states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)

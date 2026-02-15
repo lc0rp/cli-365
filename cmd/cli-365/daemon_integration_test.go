@@ -3,13 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/lc0rp/cli-365/internal/browser"
 )
 
@@ -251,6 +254,57 @@ func TestDaemonBrowserCrashRecoveryIntegration(t *testing.T) {
 	}
 }
 
+func TestDaemonClosedPrimaryTabRecoveryIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := buildCLIBinary(t)
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", homeDir)
+
+	run := func(args ...string) binaryResult {
+		return runBinary(t, binPath, stateHome, homeDir, args...)
+	}
+
+	defer func() {
+		_ = run("daemon", "stop")
+		_ = run("browser", "stop")
+	}()
+
+	first := run("--daemon", "browser", "start")
+	if first.exitCode != 0 {
+		if shouldSkipBrowserIntegration(first.stderr) {
+			t.Skipf("browser integration prerequisites unavailable: %s", strings.TrimSpace(first.stderr))
+		}
+		t.Fatalf("first --daemon browser start exit=%d stderr=%q", first.exitCode, first.stderr)
+	}
+
+	rt, err := browser.LoadRuntime()
+	if err != nil {
+		t.Fatalf("LoadRuntime() error: %v", err)
+	}
+	b, err := browser.ConnectEndpoint(rt.WSEndpoint)
+	if err != nil {
+		t.Fatalf("ConnectEndpoint() error: %v", err)
+	}
+
+	if err := closeAllOWATabs(b); err != nil {
+		t.Fatalf("closeAllOWATabs() error: %v", err)
+	}
+
+	second := run("--daemon", "browser", "start")
+	if second.exitCode != 0 {
+		t.Fatalf("second --daemon browser start exit=%d stderr=%q", second.exitCode, second.stderr)
+	}
+
+	if err := waitForSingleOWATab(b, 3*time.Second); err != nil {
+		t.Fatalf("waitForSingleOWATab() error: %v", err)
+	}
+}
+
 func buildCLIBinary(t *testing.T) string {
 	t.Helper()
 
@@ -320,4 +374,84 @@ func shouldSkipBrowserIntegration(stderr string) bool {
 		}
 	}
 	return false
+}
+
+func closeAllOWATabs(b *rod.Browser) error {
+	pages, err := b.Pages()
+	if err != nil {
+		return err
+	}
+
+	closedAny := false
+	for _, page := range pages {
+		info, err := page.Info()
+		if err != nil || info == nil {
+			continue
+		}
+		if !isOWAURL(info.URL) {
+			continue
+		}
+		_ = page.Close()
+		closedAny = true
+	}
+	if !closedAny {
+		return nil
+	}
+	return nil
+}
+
+func waitForSingleOWATab(b *rod.Browser, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		count, err := countOWATabs(b)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		if count == 1 {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	count, err := countOWATabs(b)
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("expected one OWA tab after recovery, got %d", count)
+}
+
+func countOWATabs(b *rod.Browser) (int, error) {
+	pages, err := b.Pages()
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, page := range pages {
+		info, err := page.Info()
+		if err != nil || info == nil {
+			continue
+		}
+		if isOWAURL(info.URL) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func isOWAURL(raw string) bool {
+	url := strings.ToLower(strings.TrimSpace(raw))
+	if url == "" {
+		return false
+	}
+	if !strings.Contains(url, "outlook.office.com") &&
+		!strings.Contains(url, "outlook.office365.com") &&
+		!strings.Contains(url, "outlook.live.com") &&
+		!strings.Contains(url, "outlook.cloud.microsoft") {
+		return false
+	}
+	return strings.Contains(url, "/mail") ||
+		strings.Contains(url, "/owa/") ||
+		strings.Contains(url, "/calendar")
 }
