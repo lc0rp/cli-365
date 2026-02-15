@@ -106,3 +106,4 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - Integration tests for auto-start, reuse, recovery, timeout behavior.
 - Contract tests for output parity vs non-daemon mode.
   - stable daemon error-code contract coverage now includes `QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`.
+- CI smoke workflow for deterministic daemon parity/e2e now runs on Linux + macOS: `.github/workflows/daemon-e2e-smoke.yml`.

@@ -104,7 +104,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 ## Definition of done (v1 readiness)
 
-- [ ] End-to-end `--daemon` works on Linux and macOS.
+- [ ] End-to-end `--daemon` works on Linux and macOS. (deterministic daemon smoke workflow added at `.github/workflows/daemon-e2e-smoke.yml`; Linux passes locally, macOS confirmation pending CI run after push)
 - [x] Queue is FIFO + bounded with deterministic overflow behavior.
 - [x] Auth pause/recovery path works with timeout fan-out errors.
 - [x] `--cdp-port` mismatch is enforced.
