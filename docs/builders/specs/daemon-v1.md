@@ -10,7 +10,7 @@ read_when: Need daemon v1 contracts, defaults, architecture, and acceptance crit
 
 # cli-365 daemon mode v1 spec
 
-Status: In progress (Phase A/B complete; Phase C partial; Phase D auth recovery coordinator implemented with unit coverage on 2026-02-15; Phase E coalescing + duplicate/throttle flood controls in place; Phase F read-retry/no-write-replay baseline implemented)
+Status: In progress (Phase A/B complete; Phase C partial; Phase D auth recovery coordinator implemented with unit coverage on 2026-02-15; Phase E coalescing + duplicate/throttle flood controls in place; Phase F read-retry/no-write-replay + structured redacted logging baseline implemented)
 Owner: cli-365
 Type: Spec / architecture
 Last updated: 2026-02-15

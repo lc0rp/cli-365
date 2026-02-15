@@ -47,6 +47,11 @@ func (s *Server) runAuthRecovery(parent context.Context) bool {
 	s.setAuthState(AuthStateRecovering)
 	s.setPaused(true)
 	defer s.setPaused(false)
+	s.logEvent("warn", "auth_recovery_start", map[string]interface{}{
+		"state":       string(AuthStateRecovering),
+		"login_url":   s.opts.LoginURL,
+		"queue_depth": len(s.execQ),
+	})
 
 	_ = s.notifyAuth(ctx, AuthNotification{
 		Severity:   "warning",
@@ -67,10 +72,19 @@ func (s *Server) runAuthRecovery(parent context.Context) bool {
 
 	if s.waitForAuthReady(ctx, secureDone) {
 		s.setAuthState(AuthStateReady)
+		s.logEvent("info", "auth_recovery_success", map[string]interface{}{
+			"state":       string(AuthStateReady),
+			"queue_depth": len(s.execQ),
+		})
 		return true
 	}
 
 	s.setAuthState(AuthStateFailed)
+	s.logEvent("error", "auth_recovery_timeout", map[string]interface{}{
+		"state":       string(AuthStateFailed),
+		"login_url":   s.opts.LoginURL,
+		"queue_depth": len(s.execQ),
+	})
 	_ = s.notifyAuth(context.Background(), AuthNotification{
 		Severity:   "error",
 		Reason:     "auth_timeout",

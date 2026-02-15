@@ -87,7 +87,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 
 - [x] Read-command retry/backoff for transient `429/5xx`.
 - [x] No automatic replay for non-idempotent writes.
-- [ ] Redact tokens/canary in all logs.
+- [x] Redact tokens/canary in all logs.
 - [x] Add payload size limits and command table validation.
 - [x] Bound in-memory response buffering for large outputs.
 - [ ] Complete contract tests to match non-daemon command semantics. (baseline deterministic parity tests added)

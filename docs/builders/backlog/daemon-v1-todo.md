@@ -77,8 +77,8 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 - [x] Retry/backoff for read-command transient `429/5xx`.
 - [x] No automatic replay for non-idempotent writes.
-- [ ] Redact token/canary from logs.
-- [ ] Emit structured daemon logs without auth/token leakage.
+- [x] Redact token/canary from logs.
+- [x] Emit structured daemon logs without auth/token leakage.
 - [x] Keep allowlist/readonly enforcement server-side in daemon path.
 - [x] Add IPC payload size limits and command-table validation.
 - [x] Add panic guard around request execution.
@@ -108,4 +108,4 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Auth pause/recovery path works with timeout fan-out errors.
 - [x] `--cdp-port` mismatch is enforced.
 - [ ] OpenClaw notifications fire on auth-required and auth-timeout.
-- [ ] No bearer/canary token leakage in daemon logs.
+- [x] No bearer/canary token leakage in daemon logs.

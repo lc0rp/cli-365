@@ -39,6 +39,7 @@ func daemonCommand() *cli.Command {
 					applyDaemonRuntimeEnv(cfg.Daemon.Display)
 					opts := daemon.ResolveOptions(cfg)
 					server := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
+					server.SetLogWriter(os.Stderr)
 
 					ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 					defer stop()

@@ -50,6 +50,9 @@ type Server struct {
 
 	randMu sync.Mutex
 	rng    *rand.Rand
+
+	logMu     sync.Mutex
+	logWriter io.Writer
 }
 
 type queuedExec struct {
@@ -80,6 +83,7 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.secureInputRunner = defaultSecureInputRunner
 	srv.notifyAuth = defaultNotifyAuth(opts.NotifyProvider, opts.NotifyOpenClawCmd, opts.NotifyChannel, opts.NotifyTarget)
 	srv.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	srv.logWriter = io.Discard
 	return srv
 }
 
@@ -135,6 +139,11 @@ func (s *Server) Run(ctx context.Context) error {
 		_ = releaseFileLock(s.opts.LockPath, s.lockFile)
 		return err
 	}
+	s.logEvent("info", "daemon_start", map[string]interface{}{
+		"pid":         os.Getpid(),
+		"socket_path": s.opts.SocketPath,
+		"lock_path":   s.opts.LockPath,
+	})
 
 	defer func() {
 		s.requestStop()
@@ -147,6 +156,10 @@ func (s *Server) Run(ctx context.Context) error {
 			LockPath:   s.opts.LockPath,
 			StartedAt:  started,
 			StoppedAt:  time.Now().UTC(),
+		})
+		s.logEvent("info", "daemon_stop", map[string]interface{}{
+			"pid":         os.Getpid(),
+			"socket_path": s.opts.SocketPath,
 		})
 	}()
 
@@ -483,6 +496,16 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 
 	resp.Stdout = limitResponseOutput(resp.Stdout, s.opts.MaxResponseBytes)
 	resp.Stderr = limitResponseOutput(resp.Stderr, s.opts.MaxResponseBytes)
+	s.logEvent("info", "request_complete", map[string]interface{}{
+		"request_id":    task.req.RequestID,
+		"command_path":  task.req.CommandPath,
+		"exit_code":     resp.ExitCode,
+		"error_code":    resp.ErrorCode,
+		"queue_wait_ms": resp.QueueWaitMS,
+		"exec_ms":       resp.ExecMS,
+		"ok":            resp.OK,
+		"stderr":        resp.Stderr,
+	})
 
 	return resp
 }
