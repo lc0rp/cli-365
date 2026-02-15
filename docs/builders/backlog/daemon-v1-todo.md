@@ -84,7 +84,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Add panic guard around request execution.
 - [x] Bound in-memory response buffering for large outputs.
 - [x] Implement graceful daemon stop with queue drain policy + browser cleanup. (daemon now runs stop cleanup on shutdown, resets cached tab/browser handles, and only stops managed browser instances when `state_dir` matches `paths.RuntimePath()` parent)
-- [ ] Add contract tests for daemon vs non-daemon output parity. (deterministic parity now covers `help`, unknown command, missing help topic, `auth status` text/json for both empty cache and seeded token-cache states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topic paths for `mail|calendar|auth|browser|daemon|debug`)
+- [x] Add contract tests for daemon vs non-daemon output parity. (deterministic parity now covers `help`, unknown command, missing help topic, top-level command help defaults for `auth|browser|daemon|mail|calendar|debug`, `auth status` text/json for both empty cache and seeded token-cache states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topic paths for `mail|calendar|auth|browser|daemon|debug`)
 
 ## Required test stories
 
@@ -99,7 +99,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Integration: closed primary-tab recovery. (guarded integration test closes all OWA tabs then verifies daemon recreates a single primary tab)
 - [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
 - [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
-- [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (deterministic parity expanded to include `auth status` text/json in empty+cached-token states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`)
+- [x] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (deterministic parity includes top-level command help defaults for `auth|browser|daemon|mail|calendar|debug`, `auth status` text/json in empty+cached-token states, `auth logout`, `browser status` text/json, `browser stop`, `daemon status` text/json, `daemon ping` text/json, and help topics for `mail|calendar|auth|browser|daemon|debug`; non-deterministic authenticated/write flows are covered by integration tests)
 - [x] Contract: stable daemon error codes are emitted (`QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
 
 ## Definition of done (v1 readiness)

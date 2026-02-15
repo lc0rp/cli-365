@@ -143,20 +143,40 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 			argv: []string{"help", "mail"},
 		},
 		{
+			name: "mail command help default",
+			argv: []string{"mail"},
+		},
+		{
 			name: "calendar help",
 			argv: []string{"help", "calendar"},
+		},
+		{
+			name: "calendar command help default",
+			argv: []string{"calendar"},
 		},
 		{
 			name: "auth help",
 			argv: []string{"help", "auth"},
 		},
 		{
+			name: "auth command help default",
+			argv: []string{"auth"},
+		},
+		{
 			name: "browser help",
 			argv: []string{"help", "browser"},
 		},
 		{
+			name: "browser command help default",
+			argv: []string{"browser"},
+		},
+		{
 			name: "daemon help",
 			argv: []string{"help", "daemon"},
+		},
+		{
+			name: "daemon command help default",
+			argv: []string{"daemon"},
 		},
 		{
 			name: "daemon status",
@@ -177,6 +197,10 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 		{
 			name: "debug help",
 			argv: []string{"help", "debug"},
+		},
+		{
+			name: "debug command help default",
+			argv: []string{"debug"},
 		},
 	}
 
