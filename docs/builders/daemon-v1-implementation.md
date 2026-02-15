@@ -63,6 +63,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use (extra OWA/about:blank cleanup baseline).
+- [x] Add integration test for repeated daemon browser start/tab reuse behavior (guarded skip when browser host prerequisites are unavailable).
 - [ ] Add integration test for crash-recovery.
 
 ### Phase D: Auth recovery + notifications

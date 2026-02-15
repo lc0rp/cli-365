@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lc0rp/cli-365/internal/browser"
 )
 
 type binaryResult struct {
@@ -81,6 +83,91 @@ func TestDaemonAutoStartAndReuseIntegration(t *testing.T) {
 	}
 }
 
+func TestDaemonBrowserStartPrimaryTabReuseIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := buildCLIBinary(t)
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", homeDir)
+
+	run := func(args ...string) binaryResult {
+		return runBinary(t, binPath, stateHome, homeDir, args...)
+	}
+
+	// Best-effort cleanup for all test paths.
+	defer func() {
+		_ = run("daemon", "stop")
+		_ = run("browser", "stop")
+	}()
+
+	first := run("--daemon", "browser", "start")
+	if first.exitCode != 0 {
+		if shouldSkipBrowserIntegration(first.stderr) {
+			t.Skipf("browser integration prerequisites unavailable: %s", strings.TrimSpace(first.stderr))
+		}
+		t.Fatalf("first --daemon browser start exit=%d stderr=%q", first.exitCode, first.stderr)
+	}
+
+	second := run("--daemon", "browser", "start")
+	if second.exitCode != 0 {
+		if shouldSkipBrowserIntegration(second.stderr) {
+			t.Skipf("browser integration prerequisites unavailable: %s", strings.TrimSpace(second.stderr))
+		}
+		t.Fatalf("second --daemon browser start exit=%d stderr=%q", second.exitCode, second.stderr)
+	}
+
+	rt, err := browser.LoadRuntime()
+	if err != nil {
+		t.Fatalf("LoadRuntime() error: %v", err)
+	}
+	b, err := browser.ConnectEndpoint(rt.WSEndpoint)
+	if err != nil {
+		t.Fatalf("ConnectEndpoint() error: %v", err)
+	}
+
+	pages, err := b.Pages()
+	if err != nil {
+		t.Fatalf("Pages() error: %v", err)
+	}
+
+	owaCount := 0
+	for _, page := range pages {
+		info, err := page.Info()
+		if err != nil || info == nil {
+			continue
+		}
+		url := strings.ToLower(strings.TrimSpace(info.URL))
+		if strings.Contains(url, "outlook.office.com") || strings.Contains(url, "outlook.office365.com") || strings.Contains(url, "outlook.live.com") || strings.Contains(url, "outlook.cloud.microsoft") {
+			owaCount++
+		}
+	}
+	if owaCount == 0 {
+		t.Fatalf("expected at least one OWA tab after daemon browser start, got %d", owaCount)
+	}
+	if owaCount > 1 {
+		t.Fatalf("expected one primary OWA tab after repeated daemon browser start, got %d", owaCount)
+	}
+
+	status := run("--json", "daemon", "status")
+	if status.exitCode != 0 {
+		t.Fatalf("daemon status exit=%d stderr=%q", status.exitCode, status.stderr)
+	}
+	var ds struct {
+		Running bool `json:"running"`
+		PID     int  `json:"pid"`
+	}
+	if err := json.Unmarshal([]byte(status.stdout), &ds); err != nil {
+		t.Fatalf("parse daemon status: %v (stdout=%q)", err, status.stdout)
+	}
+	if !ds.Running || ds.PID <= 0 {
+		t.Fatalf("daemon status running=%v pid=%d", ds.Running, ds.PID)
+	}
+}
+
 func buildCLIBinary(t *testing.T) string {
 	t.Helper()
 
@@ -132,4 +219,22 @@ func repoRoot(t *testing.T) string {
 		t.Fatal("unable to resolve caller path")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func shouldSkipBrowserIntegration(stderr string) bool {
+	lower := strings.ToLower(stderr)
+	for _, needle := range []string{
+		"chrome",
+		"chromium",
+		"executable file not found",
+		"no such file or directory",
+		"cannot find",
+		"sandbox",
+		"permission denied",
+	} {
+		if strings.Contains(lower, needle) {
+			return true
+		}
+	}
+	return false
 }

@@ -94,7 +94,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Unit: auth recovery coordinator transitions and timeout fan-out.
 - [x] Unit: `CDP_PORT_MISMATCH` path.
 - [x] Integration: first `--daemon` call auto-starts daemon.
-- [ ] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse covered; browser/tab reuse pending)
+- [x] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse + repeated `--daemon browser start` primary-tab reuse integration test; host prerequisites required, test auto-skips when unavailable)
 - [ ] Integration: browser crash recovery.
 - [x] Integration: auth-required triggers pause + secure-input + notifier. (daemon IPC integration coverage)
 - [x] Integration: auth timeout fails pending requests with stable error codes. (daemon IPC integration coverage)
