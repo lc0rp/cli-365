@@ -1,3 +1,13 @@
+---
+type: Reference
+primary_audience: Builders
+owner: cli-365 maintainers
+last_verified: 2026-02-15
+next_review_by: 2026-03-15
+source_of_truth: ./mvp-spec.md
+read_when: Need baseline MVP feature/architecture scope.
+---
+
 # cli-365 — Spec (MVP)
 
 ## MVP (Mail)

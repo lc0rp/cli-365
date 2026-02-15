@@ -1,3 +1,13 @@
+---
+type: Reference
+primary_audience: Builders
+owner: cli-365 maintainers
+last_verified: 2026-02-15
+next_review_by: 2026-02-22
+source_of_truth: ./mvp-status.md
+read_when: Need current feature health before selecting next implementation work.
+---
+
 # MVP Status
 
 ## Mail
