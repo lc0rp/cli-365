@@ -108,6 +108,10 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 			name: "missing help topic",
 			argv: []string{"help", "missing-topic"},
 		},
+		{
+			name: "auth status",
+			argv: []string{"auth", "status"},
+		},
 	}
 
 	for _, tc := range cases {
