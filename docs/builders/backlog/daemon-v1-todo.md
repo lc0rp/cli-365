@@ -19,7 +19,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Confirm baseline branch builds/tests pass before daemon work starts (`go test ./...`).
 - [x] Confirm secure-input config path is valid (`auth.secure_input`) for auth recovery flow.
 - [x] Confirm secure-input dependency contract: source repo `/path/to/projects/secure-targeted-input`, daemon target binary `secure-targeted-input` resolved from `PATH`.
-- [ ] Confirm OpenClaw CLI is available on target dev/test hosts.
+- [x] Confirm OpenClaw CLI is available on target dev/test hosts. (daemon startup now preflights notifier command lookup and emits structured `notifier_unavailable` warning when missing)
 
 ### Phase A: daemon skeleton + IPC
 
@@ -107,5 +107,5 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Queue is FIFO + bounded with deterministic overflow behavior.
 - [x] Auth pause/recovery path works with timeout fan-out errors.
 - [x] `--cdp-port` mismatch is enforced.
-- [x] OpenClaw notifications fire on auth-required and auth-timeout. (auth recovery path + notifier command invocation tests; host CLI availability still tracked in pre-dev gate)
+- [x] OpenClaw notifications fire on auth-required and auth-timeout. (auth recovery path + notifier command invocation tests + startup notifier availability preflight warning)
 - [x] No bearer/canary token leakage in daemon logs.

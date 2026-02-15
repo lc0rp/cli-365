@@ -68,6 +68,7 @@ type Server struct {
 	tokenRefresher   tokenRefresherFunc
 	sessionProbe     sessionProbeFunc
 	tokenRefreshLead time.Duration
+	lookupPath       lookupPathFunc
 }
 
 type queuedExec struct {
@@ -106,6 +107,7 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.tokenRefresher = srv.defaultTokenRefresher
 	srv.sessionProbe = srv.defaultSessionProbe
 	srv.tokenRefreshLead = defaultTokenRefreshLead
+	srv.lookupPath = defaultLookupPath
 	return srv
 }
 
@@ -166,6 +168,7 @@ func (s *Server) Run(ctx context.Context) error {
 		"socket_path": s.opts.SocketPath,
 		"lock_path":   s.opts.LockPath,
 	})
+	s.logNotifierAvailability()
 
 	defer func() {
 		s.requestStop()
