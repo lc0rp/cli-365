@@ -26,10 +26,7 @@ type tabPlan struct {
 }
 
 func shouldMaintainPrimaryTab(commandPath string, argv []string) bool {
-	path := strings.ToLower(strings.TrimSpace(commandPath))
-	if path == "" {
-		path = strings.ToLower(strings.TrimSpace(inferCommandPath(argv)))
-	}
+	path := normalizedCommandPath(commandPath, argv)
 	switch {
 	case strings.HasPrefix(path, "mail "):
 		return true
@@ -37,11 +34,26 @@ func shouldMaintainPrimaryTab(commandPath string, argv []string) bool {
 		return true
 	case strings.HasPrefix(path, "auth login"):
 		return true
+	case path == "browser start" || strings.HasPrefix(path, "browser start "):
+		return true
 	case strings.HasPrefix(path, "debug "):
 		return true
 	default:
 		return false
 	}
+}
+
+func shouldResetPrimaryTab(commandPath string, argv []string) bool {
+	path := normalizedCommandPath(commandPath, argv)
+	return path == "browser stop" || strings.HasPrefix(path, "browser stop ")
+}
+
+func normalizedCommandPath(commandPath string, argv []string) string {
+	path := strings.ToLower(strings.TrimSpace(commandPath))
+	if path == "" {
+		path = strings.ToLower(strings.TrimSpace(inferCommandPath(argv)))
+	}
+	return path
 }
 
 func planPrimaryTab(existingPrimary string, pages []tabSnapshot) tabPlan {

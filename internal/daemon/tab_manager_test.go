@@ -15,6 +15,7 @@ func TestShouldMaintainPrimaryTab(t *testing.T) {
 		{name: "mail search", commandPath: "mail search", want: true},
 		{name: "calendar list", commandPath: "calendar list", want: true},
 		{name: "auth login", commandPath: "auth login", want: true},
+		{name: "browser start", commandPath: "browser start", want: true},
 		{name: "debug discover", commandPath: "debug discover", want: true},
 		{name: "auth status", commandPath: "auth status", want: false},
 		{name: "browser status", commandPath: "browser status", want: false},
@@ -27,6 +28,29 @@ func TestShouldMaintainPrimaryTab(t *testing.T) {
 			got := shouldMaintainPrimaryTab(tt.commandPath, tt.argv)
 			if got != tt.want {
 				t.Fatalf("shouldMaintainPrimaryTab(%q, %v) = %v, want %v", tt.commandPath, tt.argv, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldResetPrimaryTab(t *testing.T) {
+	tests := []struct {
+		name        string
+		commandPath string
+		argv        []string
+		want        bool
+	}{
+		{name: "browser stop", commandPath: "browser stop", want: true},
+		{name: "browser stop with args", commandPath: "browser stop --force", want: true},
+		{name: "mail search", commandPath: "mail search", want: false},
+		{name: "infer from argv", commandPath: "", argv: []string{"browser", "stop"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldResetPrimaryTab(tt.commandPath, tt.argv)
+			if got != tt.want {
+				t.Fatalf("shouldResetPrimaryTab(%q, %v) = %v, want %v", tt.commandPath, tt.argv, got, tt.want)
 			}
 		})
 	}
