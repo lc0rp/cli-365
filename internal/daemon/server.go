@@ -58,6 +58,7 @@ type Server struct {
 
 	tabMu        sync.Mutex
 	primaryTabID string
+	tabConn      *tabBrowserConn
 }
 
 type queuedExec struct {

@@ -3,12 +3,19 @@ package daemon
 import (
 	"strings"
 
+	"github.com/go-rod/rod"
+
 	"github.com/lc0rp/cli-365/internal/browser"
 )
 
 type tabSnapshot struct {
 	ID  string
 	URL string
+}
+
+type tabBrowserConn struct {
+	Endpoint string
+	Browser  *rod.Browser
 }
 
 type tabPlan struct {
@@ -102,23 +109,53 @@ func (s *Server) setPrimaryTabID(id string) {
 	s.tabMu.Unlock()
 }
 
+func (s *Server) getTabBrowser(endpoint string) *rod.Browser {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return nil
+	}
+
+	s.tabMu.Lock()
+	defer s.tabMu.Unlock()
+
+	if s.tabConn != nil && s.tabConn.Endpoint == endpoint && s.tabConn.Browser != nil {
+		return s.tabConn.Browser
+	}
+
+	conn, err := browser.ConnectEndpoint(endpoint)
+	if err != nil {
+		s.tabConn = nil
+		s.primaryTabID = ""
+		return nil
+	}
+	s.tabConn = &tabBrowserConn{
+		Endpoint: endpoint,
+		Browser:  conn,
+	}
+	return conn
+}
+
+func (s *Server) resetTabBrowser() {
+	s.tabMu.Lock()
+	s.tabConn = nil
+	s.primaryTabID = ""
+	s.tabMu.Unlock()
+}
+
 func (s *Server) maintainPrimaryOWATab() {
 	rt, err := browser.LoadRuntime()
 	if err != nil || rt == nil || strings.TrimSpace(rt.WSEndpoint) == "" {
 		return
 	}
 
-	b, err := browser.ConnectEndpoint(rt.WSEndpoint)
-	if err != nil {
-		s.setPrimaryTabID("")
+	b := s.getTabBrowser(rt.WSEndpoint)
+	if b == nil {
 		return
 	}
-	defer func() {
-		_ = b.Close()
-	}()
 
 	pages, err := b.Pages()
 	if err != nil {
+		s.resetTabBrowser()
 		return
 	}
 
