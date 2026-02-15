@@ -11,7 +11,7 @@ read_when: Starting daemon mode implementation work.
 # Implement daemon mode v1
 
 This page translates `docs/builders/specs/daemon-v1.md` into coding order.  
-Status: not implemented yet.
+Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete)
 
 ## Scope
 
@@ -41,26 +41,27 @@ Status: not implemented yet.
 
 ### Phase A: Skeleton + IPC
 
-- [ ] Add global `--daemon` flag.
-- [ ] Add `daemon run|status|stop` commands.
-- [ ] Add UDS socket + lock + pid/status paths under XDG state.
-- [ ] Enforce file/socket permissions (`0700` dir, `0600` files).
-- [ ] Add tests for single-instance lock behavior.
+- [x] Add global `--daemon` flag.
+- [x] Add `daemon run|status|stop` commands.
+- [x] Add UDS socket + lock + pid/status paths under XDG state.
+- [x] Enforce file/socket permissions (`0700` dir, `0600` files).
+- [x] Add tests for single-instance lock behavior.
 
 ### Phase B: Queue + dispatch
 
-- [ ] Build bounded FIFO queue (`max_queue_size`, default 64).
-- [ ] Return deterministic `QUEUE_FULL`.
-- [ ] Single worker goroutine; in-process dispatch (no shell recursion).
-- [ ] Add per-request timeout (default 2m).
-- [ ] Queue tests: FIFO, capacity, pause/resume, drain-fail.
+- [x] Build bounded FIFO queue (`max_queue_size`, default 64).
+- [x] Return deterministic `QUEUE_FULL`.
+- [x] Single worker goroutine; in-process dispatch (no shell recursion).
+- [x] Add per-request timeout (default 2m).
+- [x] Queue tests: FIFO, capacity, pause/resume, drain-fail.
 
 ### Phase C: Browser ownership + CDP consistency
 
 - [ ] Daemon owns browser/tab/session state.
 - [ ] Reuse one primary OWA tab.
 - [ ] Recover tab/browser crash paths.
-- [ ] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
+- [x] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
+- [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [ ] Add integration test for crash-recovery.
 
 ### Phase D: Auth recovery + notifications
@@ -86,8 +87,8 @@ Status: not implemented yet.
 - [ ] Read-command retry/backoff for transient `429/5xx`.
 - [ ] No automatic replay for non-idempotent writes.
 - [ ] Redact tokens/canary in all logs.
-- [ ] Add payload size limits and command table validation.
-- [ ] Complete contract tests to match non-daemon command semantics.
+- [ ] Add payload size limits and command table validation. (payload limits done; command table validation pending)
+- [ ] Complete contract tests to match non-daemon command semantics. (baseline deterministic parity tests added)
 
 ## Test gate before merge
 

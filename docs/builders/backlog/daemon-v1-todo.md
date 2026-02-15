@@ -16,39 +16,39 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 ## Pre-dev gate
 
-- [ ] Confirm baseline branch builds/tests pass before daemon work starts (`go test ./...`).
+- [x] Confirm baseline branch builds/tests pass before daemon work starts (`go test ./...`).
 - [ ] Confirm secure-input config path is valid (`auth.secure_input`) for auth recovery flow.
-- [ ] Confirm secure-input dependency contract: source repo `/path/to/projects/secure-targeted-input`, daemon target binary `secure-targeted-input` resolved from `PATH`.
+- [x] Confirm secure-input dependency contract: source repo `/path/to/projects/secure-targeted-input`, daemon target binary `secure-targeted-input` resolved from `PATH`.
 - [ ] Confirm OpenClaw CLI is available on target dev/test hosts.
 
 ### Phase A: daemon skeleton + IPC
 
-- [ ] Add global `--daemon` flag.
-- [ ] Add `daemon run|status|stop` commands.
-- [ ] Add optional `daemon ping` command for health checks.
-- [ ] Add UDS socket + lock + status file lifecycle.
-- [ ] Enforce single instance via lock file.
-- [ ] Enforce runtime permissions (`0700` state dir, `0600` socket/lock/status).
-- [ ] Implement `--daemon` client flow: connect -> auto-start if absent -> submit -> await response.
-- [ ] Scope guard v1 to Linux/macOS.
-- [ ] Add daemon config schema + defaults (`max_queue_size`, `default_command_timeout`, `auth_recovery_timeout`, `display`, notify config).
+- [x] Add global `--daemon` flag.
+- [x] Add `daemon run|status|stop` commands.
+- [x] Add optional `daemon ping` command for health checks.
+- [x] Add UDS socket + lock + status file lifecycle.
+- [x] Enforce single instance via lock file.
+- [x] Enforce runtime permissions (`0700` state dir, `0600` socket/lock/status).
+- [x] Implement `--daemon` client flow: connect -> auto-start if absent -> submit -> await response.
+- [x] Scope guard v1 to Linux/macOS.
+- [x] Add daemon config schema + defaults (`max_queue_size`, `default_command_timeout`, `auth_recovery_timeout`, `display`, notify config).
 
 ### Phase B: queue + worker dispatch
 
-- [ ] Implement bounded FIFO queue (`max_queue_size = 64` default).
-- [ ] Return deterministic `QUEUE_FULL` on enqueue overflow.
-- [ ] Route commands through in-process dispatcher (no recursive shell exec).
-- [ ] Add request timeout (`default_command_timeout = 2m`).
-- [ ] Add queue pause/resume + drain-fail semantics for auth timeout/shutdown.
-- [ ] Implement request/response envelope contract (`request_id`, timing fields, `queue_wait_ms`, `exec_ms`).
-- [ ] Return stable daemon transport codes (`DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
+- [x] Implement bounded FIFO queue (`max_queue_size = 64` default).
+- [x] Return deterministic `QUEUE_FULL` on enqueue overflow.
+- [x] Route commands through in-process dispatcher (no recursive shell exec).
+- [x] Add request timeout (`default_command_timeout = 2m`).
+- [x] Add queue pause/resume + drain-fail semantics for auth timeout/shutdown.
+- [x] Implement request/response envelope contract (`request_id`, timing fields, `queue_wait_ms`, `exec_ms`).
+- [x] Return stable daemon transport codes (`DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
 
 ### Phase C: browser/session ownership
 
 - [ ] Daemon owns one browser + one primary OWA tab.
 - [ ] Add health/recovery for closed tab and dead browser.
-- [ ] Enforce daemon/client `--cdp-port` consistency.
-- [ ] Enforce `DISPLAY=:1` for daemon-managed browser connections.
+- [x] Enforce daemon/client `--cdp-port` consistency.
+- [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [ ] Ensure temporary pages are closed after use.
 - [ ] Add token/session manager flow (session-valid probe + proactive access token refresh before expiry).
 
@@ -80,32 +80,32 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [ ] Redact token/canary from logs.
 - [ ] Emit structured daemon logs without auth/token leakage.
 - [ ] Keep allowlist/readonly enforcement server-side in daemon path.
-- [ ] Add IPC payload size limits and command-table validation.
-- [ ] Add panic guard around request execution.
+- [ ] Add IPC payload size limits and command-table validation. (payload limit done, command-table validation pending)
+- [x] Add panic guard around request execution.
 - [ ] Bound in-memory response buffering for large outputs.
 - [ ] Implement graceful daemon stop with queue drain policy + browser cleanup.
-- [ ] Add contract tests for daemon vs non-daemon output parity.
+- [ ] Add contract tests for daemon vs non-daemon output parity. (baseline parity tests added for deterministic commands)
 
 ## Required test stories
 
-- [ ] Unit: queue FIFO/capacity/pause-resume/drain-fail.
+- [x] Unit: queue FIFO/capacity/pause-resume/drain-fail.
 - [ ] Unit: coalescing (reads coalesce, writes do not).
 - [ ] Unit: flood controls (duplicate window + per-recipient/global buckets).
 - [ ] Unit: auth recovery coordinator transitions and timeout fan-out.
-- [ ] Unit: `CDP_PORT_MISMATCH` path.
+- [x] Unit: `CDP_PORT_MISMATCH` path.
 - [ ] Integration: first `--daemon` call auto-starts daemon.
 - [ ] Integration: later calls reuse same daemon/browser/tab.
 - [ ] Integration: browser crash recovery.
 - [ ] Integration: auth-required triggers pause + secure-input + notifier.
 - [ ] Integration: auth timeout fails pending requests with stable error codes.
-- [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded).
+- [ ] Contract: supported commands keep non-daemon output/exit semantics (latency/metadata excluded). (baseline parity tests cover `help`, unknown command, missing help topic)
 - [ ] Contract: stable daemon error codes are emitted (`QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`).
 
 ## Definition of done (v1 readiness)
 
 - [ ] End-to-end `--daemon` works on Linux and macOS.
-- [ ] Queue is FIFO + bounded with deterministic overflow behavior.
+- [x] Queue is FIFO + bounded with deterministic overflow behavior.
 - [ ] Auth pause/recovery path works with timeout fan-out errors.
-- [ ] `--cdp-port` mismatch is enforced.
+- [x] `--cdp-port` mismatch is enforced.
 - [ ] OpenClaw notifications fire on auth-required and auth-timeout.
 - [ ] No bearer/canary token leakage in daemon logs.

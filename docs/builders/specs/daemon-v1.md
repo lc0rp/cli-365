@@ -10,7 +10,7 @@ read_when: Need daemon v1 contracts, defaults, architecture, and acceptance crit
 
 # cli-365 daemon mode v1 spec
 
-Status: Draft (discussion complete, implementation NOT started)
+Status: In progress (Phase A complete; Phase B queue/transport + in-process dispatch + CDP mismatch guard in place on 2026-02-15; auth recovery pending)
 Owner: cli-365
 Type: Spec / architecture
 Last updated: 2026-02-15
@@ -350,6 +350,7 @@ daemon:
   socket_path: ""               # default: $XDG_STATE_HOME/cli-365/daemon.sock
   lock_path: ""                 # default: $XDG_STATE_HOME/cli-365/daemon.lock
   max_queue_size: 64
+  max_request_bytes: 1048576
   default_command_timeout: "2m"
   auth_recovery_timeout: "5m"
   reject_new_while_auth_paused: true
