@@ -167,7 +167,7 @@ State machine:
 On entering `AUTH_RECOVERING`:
 1. Pause queue consumption.
 2. Reject new requests (`AUTH_PAUSED`).
-3. Launch secure input command.
+3. Launch secure input command (`secure-targeted-input` from `PATH`).
 4. Notify operator via OpenClaw with current login URL.
 5. Poll for session valid until timeout (`auth_recovery_timeout`, default 5m).
 
@@ -369,6 +369,8 @@ daemon:
 
 Notes:
 - Existing `auth.secure_input` config remains source-of-truth for secure input command.
+- Secure input project source is `/path/to/projects/secure-targeted-input`.
+- Daemon should target the `secure-targeted-input` binary from `PATH`; the project is active dev and may be updated when daemon integration needs code changes.
 - `--cdp-port` mismatch against active daemon should fail fast.
 
 ---

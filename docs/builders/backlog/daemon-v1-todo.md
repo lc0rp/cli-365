@@ -18,6 +18,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 - [ ] Confirm baseline branch builds/tests pass before daemon work starts (`go test ./...`).
 - [ ] Confirm secure-input config path is valid (`auth.secure_input`) for auth recovery flow.
+- [ ] Confirm secure-input dependency contract: source repo `/path/to/projects/secure-targeted-input`, daemon target binary `secure-targeted-input` resolved from `PATH`.
 - [ ] Confirm OpenClaw CLI is available on target dev/test hosts.
 
 ### Phase A: daemon skeleton + IPC
@@ -55,7 +56,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 - [ ] Pause queue on auth-required signal.
 - [ ] Reject new requests while paused (`AUTH_PAUSED`).
-- [ ] Invoke secure input + OpenClaw notification.
+- [ ] Invoke secure input (`secure-targeted-input` binary from `PATH`) + OpenClaw notification.
 - [ ] Timeout pending requests at `auth_recovery_timeout = 5m` (`AUTH_TIMEOUT`).
 - [ ] Model explicit state machine transitions (`READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`).
 - [ ] Fail all queued pending requests on auth timeout (fan-out).
