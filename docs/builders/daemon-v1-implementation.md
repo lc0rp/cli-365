@@ -11,7 +11,7 @@ read_when: Starting daemon mode implementation work.
 # Implement daemon mode v1
 
 This page translates `docs/builders/specs/daemon-v1.md` into coding order.  
-Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete, Phase D auth coordinator complete at unit level, Phase F retry/no-replay + redacted logging + graceful stop queue-drain + managed-browser cleanup complete)
+Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard + token/session preflight complete, Phase D auth coordinator complete at unit level, Phase F retry/no-replay + redacted logging + graceful stop queue-drain + managed-browser cleanup complete)
 
 ## Scope
 
@@ -60,6 +60,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [ ] Daemon owns browser/tab/session state. (baseline primary-tab manager added in daemon worker path; `browser start` participates in tab maintenance and `browser stop` resets cached tab/browser handle)
 - [ ] Reuse one primary OWA tab. (daemon now selects/tracks a primary OWA tab and closes extra OWA/about:blank tabs after browser-affecting commands)
 - [ ] Recover tab/browser crash paths. (baseline tab recovery added: reuse blank/create tab + navigate to OWA when no OWA tab found)
+- [x] Add token/session preflight manager: parse JWT `exp`, proactively refresh near-expiry token cache, probe session validity before `mail|calendar`, and trigger auth recovery when probe fails.
 - [x] Enforce `--cdp-port` mismatch error (`CDP_PORT_MISMATCH`).
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use (extra OWA/about:blank cleanup baseline).

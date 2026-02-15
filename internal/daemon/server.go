@@ -62,7 +62,12 @@ type Server struct {
 	primaryTabID string
 	tabConn      *tabBrowserConn
 
-	stopCleanup func() error
+	stopCleanup      func() error
+	tokenLoader      tokenLoaderFunc
+	tokenSaver       tokenSaverFunc
+	tokenRefresher   tokenRefresherFunc
+	sessionProbe     sessionProbeFunc
+	tokenRefreshLead time.Duration
 }
 
 type queuedExec struct {
@@ -96,6 +101,11 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	srv.logWriter = io.Discard
 	srv.stopCleanup = srv.defaultStopCleanup
+	srv.tokenLoader = defaultTokenLoader
+	srv.tokenSaver = defaultTokenSaver
+	srv.tokenRefresher = srv.defaultTokenRefresher
+	srv.sessionProbe = srv.defaultSessionProbe
+	srv.tokenRefreshLead = defaultTokenRefreshLead
 	return srv
 }
 
@@ -484,6 +494,12 @@ func (s *Server) executeTask(parent context.Context, task queuedExec) Response {
 
 	if maintainPrimary {
 		s.maintainPrimaryOWATab()
+	}
+	if !s.ensureSessionReady(parent, deadline, task.req.CommandPath, task.argv) {
+		end := time.Now().UTC()
+		resp.FinishedAt = end
+		resp.ExecMS = end.Sub(start).Milliseconds()
+		return authRecoveryFailureResponse(task.req.RequestID, "daemon auth recovery timed out")
 	}
 
 	for {

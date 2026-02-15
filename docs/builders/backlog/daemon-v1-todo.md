@@ -50,7 +50,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Enforce daemon/client `--cdp-port` consistency.
 - [x] Enforce `DISPLAY=:1` for daemon-managed browser connections.
 - [x] Ensure temporary pages are closed after use.
-- [ ] Add token/session manager flow (session-valid probe + proactive access token refresh before expiry).
+- [x] Add token/session manager flow (daemon now parses cached JWT `exp`, refreshes near-expiry token cache from primary OWA tab, and runs a preflight session-valid probe before `mail|calendar`; failed probe triggers auth recovery).
 
 ### Phase D: auth recovery path
 
