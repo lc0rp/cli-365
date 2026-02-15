@@ -102,6 +102,10 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 ## Test gate before merge
 
 - `go test ./...`
+- `GOOS=linux GOARCH=amd64 go build ./cmd/cli-365`
+- `GOOS=linux GOARCH=arm64 go build ./cmd/cli-365`
+- `GOOS=darwin GOARCH=amd64 go build ./cmd/cli-365`
+- `GOOS=darwin GOARCH=arm64 go build ./cmd/cli-365`
 - Unit tests for queue/coalescing/flood-control/auth coordinator.
 - Integration tests for auto-start, reuse, recovery, timeout behavior.
 - Contract tests for output parity vs non-daemon mode.
