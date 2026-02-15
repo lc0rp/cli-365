@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lc0rp/cli-365/internal/daemon"
+	"github.com/lc0rp/cli-365/internal/owa"
 )
 
 type cliInvocationResult struct {
@@ -225,5 +226,80 @@ func TestCaptureProcessStdioMaxBytes(t *testing.T) {
 	}
 	if stderr != errPayload[:128] {
 		t.Fatalf("stderr mismatch")
+	}
+}
+
+func TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens(t *testing.T) {
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", homeDir)
+
+	extractedAt := time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC)
+	if err := owa.SaveTokens(&owa.Tokens{
+		Canary:      "cached-canary",
+		Bearer:      "Bearer eyJhbGciOiJub25lIn0.eyJleHAiOjE4MDAwMDAwMDB9.sig",
+		UserEmail:   "cached@example.com",
+		ExtractedAt: extractedAt,
+		ExpiresAt:   extractedAt.Add(45 * time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveTokens() error: %v", err)
+	}
+
+	opts := daemonTestOptions(t)
+	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(runCtx)
+	}()
+
+	waitForDaemonPing(t, opts.SocketPath, 3*time.Second)
+
+	cases := []struct {
+		name string
+		argv []string
+	}{
+		{
+			name: "auth status text",
+			argv: []string{"auth", "status"},
+		},
+		{
+			name: "auth status json",
+			argv: []string{"--json", "auth", "status"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			direct := runDirectCLI(t, tc.argv)
+			daemonResult := runDaemonCLI(t, opts.SocketPath, tc.argv)
+
+			if daemonResult.exitCode != direct.exitCode {
+				t.Fatalf("exit code = %d, want %d", daemonResult.exitCode, direct.exitCode)
+			}
+			if daemonResult.stdout != direct.stdout {
+				t.Fatalf("stdout mismatch\n--- daemon ---\n%s\n--- direct ---\n%s", daemonResult.stdout, direct.stdout)
+			}
+			if daemonResult.stderr != direct.stderr {
+				t.Fatalf("stderr mismatch\n--- daemon ---\n%s\n--- direct ---\n%s", daemonResult.stderr, direct.stderr)
+			}
+		})
+	}
+
+	if err := daemon.Stop(opts.SocketPath, 2*time.Second); err != nil {
+		t.Fatalf("daemon.Stop() error: %v", err)
+	}
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("daemon.Run() error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for daemon shutdown")
 	}
 }
