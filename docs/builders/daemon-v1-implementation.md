@@ -98,3 +98,4 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - Unit tests for queue/coalescing/flood-control/auth coordinator.
 - Integration tests for auto-start, reuse, recovery, timeout behavior.
 - Contract tests for output parity vs non-daemon mode.
+  - stable daemon error-code contract coverage now includes `QUEUE_FULL`, `AUTH_PAUSED`, `AUTH_TIMEOUT`, `CDP_PORT_MISMATCH`, `DAEMON_UNAVAILABLE`, `REQUEST_TIMEOUT`.
