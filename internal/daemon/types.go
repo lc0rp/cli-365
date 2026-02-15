@@ -13,25 +13,37 @@ const (
 )
 
 const (
-	ErrorCodeInvalidRequest    = "INVALID_REQUEST"
-	ErrorCodeExecFailed        = "EXEC_FAILED"
-	ErrorCodeQueueFull         = "QUEUE_FULL"
-	ErrorCodeRequestTimeout    = "REQUEST_TIMEOUT"
-	ErrorCodeAuthPaused        = "AUTH_PAUSED"
-	ErrorCodeAuthTimeout       = "AUTH_TIMEOUT"
-	ErrorCodeDaemonUnavailable = "DAEMON_UNAVAILABLE"
-	ErrorCodeCDPPortMismatch   = "CDP_PORT_MISMATCH"
+	ErrorCodeInvalidRequest          = "INVALID_REQUEST"
+	ErrorCodeExecFailed              = "EXEC_FAILED"
+	ErrorCodeQueueFull               = "QUEUE_FULL"
+	ErrorCodeRequestTimeout          = "REQUEST_TIMEOUT"
+	ErrorCodeAuthPaused              = "AUTH_PAUSED"
+	ErrorCodeAuthTimeout             = "AUTH_TIMEOUT"
+	ErrorCodeDaemonUnavailable       = "DAEMON_UNAVAILABLE"
+	ErrorCodeCDPPortMismatch         = "CDP_PORT_MISMATCH"
+	ErrorCodeDuplicateWriteSuspected = "DUPLICATE_WRITE_SUSPECTED"
+	ErrorCodeWriteThrottled          = "WRITE_THROTTLED"
 )
 
 var (
 	ErrAlreadyRunning      = errors.New("daemon already running")
 	ErrUnsupportedPlatform = errors.New("daemon mode is supported only on linux and macos")
+	ErrAuthRequired        = errors.New("auth required")
+)
+
+type AuthState string
+
+const (
+	AuthStateReady      AuthState = "READY"
+	AuthStateRecovering AuthState = "AUTH_RECOVERING"
+	AuthStateFailed     AuthState = "AUTH_FAILED"
 )
 
 type Request struct {
 	RequestID   string    `json:"request_id"`
 	SubmittedAt time.Time `json:"submitted_at,omitempty"`
 	Command     string    `json:"command"`
+	CommandPath string    `json:"command_path,omitempty"`
 	Argv        []string  `json:"argv,omitempty"`
 	TimeoutMS   int       `json:"timeout_ms,omitempty"`
 	CDPPort     int       `json:"cdp_port,omitempty"`
@@ -61,15 +73,31 @@ type Status struct {
 }
 
 type Options struct {
-	StateDir              string
-	SocketPath            string
-	LockPath              string
-	StatusPath            string
-	DefaultCommandTimeout time.Duration
-	MaxQueueSize          int
-	MaxRequestBytes       int
-	CDPPort               int
-	RejectNewWhilePaused  bool
+	StateDir                         string
+	SocketPath                       string
+	LockPath                         string
+	StatusPath                       string
+	DefaultCommandTimeout            time.Duration
+	MaxQueueSize                     int
+	MaxRequestBytes                  int
+	MaxResponseBytes                 int
+	AuthRecoveryTimeout              time.Duration
+	AuthProbeInterval                time.Duration
+	CDPPort                          int
+	RejectNewWhilePaused             bool
+	CoalesceIdenticalReads           bool
+	DuplicateWriteWindowMail         time.Duration
+	DuplicateWriteWindowCalendar     time.Duration
+	WriteRateLimitPerMinute          int
+	RecipientWriteRateLimitPerMinute int
+	SecureInputCommand               string
+	NotifyProvider                   string
+	NotifyOpenClawCmd                string
+	NotifyChannel                    string
+	NotifyTarget                     string
+	LoginURL                         string
+	Allowlist                        []string
+	Readonly                         bool
 }
 
 type ExecResult struct {

@@ -49,6 +49,7 @@ func runViaDaemon(c *cli.Context) error {
 		RequestID:   fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid()),
 		SubmittedAt: time.Now().UTC(),
 		Command:     daemon.CommandExec,
+		CommandPath: buildCommandPath(c),
 		Argv:        argv,
 		TimeoutMS:   int(timeout / time.Millisecond),
 		CDPPort:     requestCDPPort,

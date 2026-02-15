@@ -239,6 +239,39 @@ func TestExecuteTaskTimeoutCode(t *testing.T) {
 	}
 }
 
+func TestExecuteTaskOutputBounded(t *testing.T) {
+	opts := testOptions(t)
+	opts.MaxResponseBytes = 16
+	srv := NewServer(opts, func(_ context.Context, _ []string, _ time.Duration) ExecResult {
+		return ExecResult{
+			ExitCode: 0,
+			Stdout:   strings.Repeat("a", 64),
+			Stderr:   strings.Repeat("b", 64),
+		}
+	})
+
+	resp := srv.executeTask(context.Background(), queuedExec{
+		req:        Request{RequestID: "bounded"},
+		argv:       []string{"help"},
+		timeout:    time.Second,
+		enqueuedAt: time.Now().UTC(),
+		respCh:     make(chan Response, 1),
+	})
+
+	if len(resp.Stdout) != 16 {
+		t.Fatalf("stdout length = %d, want 16", len(resp.Stdout))
+	}
+	if len(resp.Stderr) != 16 {
+		t.Fatalf("stderr length = %d, want 16", len(resp.Stderr))
+	}
+	if resp.Stdout != strings.Repeat("a", 16) {
+		t.Fatalf("stdout mismatch")
+	}
+	if resp.Stderr != strings.Repeat("b", 16) {
+		t.Fatalf("stderr mismatch")
+	}
+}
+
 func TestServerPanicGuard(t *testing.T) {
 	opts := testOptions(t)
 	srv := NewServer(opts, func(_ context.Context, _ []string, _ time.Duration) ExecResult {

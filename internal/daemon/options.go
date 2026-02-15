@@ -31,6 +31,11 @@ func ResolveOptions(cfg config.Config) Options {
 	if timeout <= 0 {
 		timeout = 2 * time.Minute
 	}
+	authRecoveryTimeout := cfg.Daemon.AuthRecoveryTimeout
+	if authRecoveryTimeout <= 0 {
+		authRecoveryTimeout = 5 * time.Minute
+	}
+	authProbeInterval := 2 * time.Second
 	maxQueueSize := cfg.Daemon.MaxQueueSize
 	if maxQueueSize <= 0 {
 		maxQueueSize = 64
@@ -39,17 +44,70 @@ func ResolveOptions(cfg config.Config) Options {
 	if maxRequestBytes <= 0 {
 		maxRequestBytes = 1024 * 1024
 	}
+	maxResponseBytes := cfg.Daemon.MaxResponseBytes
+	if maxResponseBytes <= 0 {
+		maxResponseBytes = 1024 * 1024
+	}
+	duplicateWriteWindowMail := cfg.Daemon.DuplicateWriteWindowMail
+	if duplicateWriteWindowMail <= 0 {
+		duplicateWriteWindowMail = 12 * time.Hour
+	}
+	duplicateWriteWindowCalendar := cfg.Daemon.DuplicateWriteWindowCalendar
+	if duplicateWriteWindowCalendar <= 0 {
+		duplicateWriteWindowCalendar = 1 * time.Hour
+	}
+	writeRateLimitPerMinute := cfg.Daemon.WriteRateLimitPerMinute
+	if writeRateLimitPerMinute <= 0 {
+		writeRateLimitPerMinute = 20
+	}
+	recipientWriteRateLimitPerMinute := cfg.Daemon.RecipientWriteRateLimitPerMinute
+	if recipientWriteRateLimitPerMinute <= 0 {
+		recipientWriteRateLimitPerMinute = 6
+	}
+	secureInputCommand := strings.TrimSpace(cfg.Auth.SecureInput)
+	if secureInputCommand == "" {
+		secureInputCommand = "secure-targeted-input"
+	}
+	notifyProvider := strings.TrimSpace(cfg.Daemon.Notify.Provider)
+	if notifyProvider == "" {
+		notifyProvider = "openclaw-cli"
+	}
+	notifyOpenClawCmd := strings.TrimSpace(cfg.Daemon.Notify.OpenClawCmd)
+	if notifyOpenClawCmd == "" {
+		notifyOpenClawCmd = "openclaw"
+	}
+	notifyChannel := strings.TrimSpace(cfg.Daemon.Notify.Channel)
+	if notifyChannel == "" {
+		notifyChannel = "discord"
+	}
+	loginURL := "https://outlook.office.com/mail/"
 
 	return Options{
-		StateDir:              stateDir,
-		SocketPath:            socketPath,
-		LockPath:              lockPath,
-		StatusPath:            statusPath,
-		DefaultCommandTimeout: timeout,
-		MaxQueueSize:          maxQueueSize,
-		MaxRequestBytes:       maxRequestBytes,
-		CDPPort:               cfg.Browser.CDPPort,
-		RejectNewWhilePaused:  cfg.Daemon.RejectNewWhileAuthPaused,
+		StateDir:                         stateDir,
+		SocketPath:                       socketPath,
+		LockPath:                         lockPath,
+		StatusPath:                       statusPath,
+		DefaultCommandTimeout:            timeout,
+		AuthRecoveryTimeout:              authRecoveryTimeout,
+		AuthProbeInterval:                authProbeInterval,
+		MaxQueueSize:                     maxQueueSize,
+		MaxRequestBytes:                  maxRequestBytes,
+		MaxResponseBytes:                 maxResponseBytes,
+		CDPPort:                          cfg.Browser.CDPPort,
+		RejectNewWhilePaused:             cfg.Daemon.RejectNewWhileAuthPaused,
+		CoalesceIdenticalReads:           cfg.Daemon.CoalesceIdenticalReads,
+		DuplicateWriteWindowMail:         duplicateWriteWindowMail,
+		DuplicateWriteWindowCalendar:     duplicateWriteWindowCalendar,
+		WriteRateLimitPerMinute:          writeRateLimitPerMinute,
+		RecipientWriteRateLimitPerMinute: recipientWriteRateLimitPerMinute,
+		SecureInputCommand:               secureInputCommand,
+		NotifyProvider:                   notifyProvider,
+		NotifyOpenClawCmd:                notifyOpenClawCmd,
+		NotifyChannel:                    notifyChannel,
+		NotifyTarget:                     strings.TrimSpace(cfg.Daemon.Notify.Target),
+		LoginURL:                         loginURL,
+		Allowlist:                        append([]string{}, cfg.Security.Allowlist...),
+		Readonly:                         cfg.Auth.Readonly,
 	}
 }
 
@@ -78,6 +136,14 @@ func (o Options) withDefaults() Options {
 	if timeout <= 0 {
 		timeout = 2 * time.Minute
 	}
+	authRecoveryTimeout := o.AuthRecoveryTimeout
+	if authRecoveryTimeout <= 0 {
+		authRecoveryTimeout = 5 * time.Minute
+	}
+	authProbeInterval := o.AuthProbeInterval
+	if authProbeInterval <= 0 {
+		authProbeInterval = 2 * time.Second
+	}
 	maxQueueSize := o.MaxQueueSize
 	if maxQueueSize <= 0 {
 		maxQueueSize = 64
@@ -86,16 +152,72 @@ func (o Options) withDefaults() Options {
 	if maxRequestBytes <= 0 {
 		maxRequestBytes = 1024 * 1024
 	}
+	maxResponseBytes := o.MaxResponseBytes
+	if maxResponseBytes <= 0 {
+		maxResponseBytes = 1024 * 1024
+	}
+	duplicateWriteWindowMail := o.DuplicateWriteWindowMail
+	if duplicateWriteWindowMail <= 0 {
+		duplicateWriteWindowMail = 12 * time.Hour
+	}
+	duplicateWriteWindowCalendar := o.DuplicateWriteWindowCalendar
+	if duplicateWriteWindowCalendar <= 0 {
+		duplicateWriteWindowCalendar = 1 * time.Hour
+	}
+	writeRateLimitPerMinute := o.WriteRateLimitPerMinute
+	if writeRateLimitPerMinute <= 0 {
+		writeRateLimitPerMinute = 20
+	}
+	recipientWriteRateLimitPerMinute := o.RecipientWriteRateLimitPerMinute
+	if recipientWriteRateLimitPerMinute <= 0 {
+		recipientWriteRateLimitPerMinute = 6
+	}
+	secureInputCommand := strings.TrimSpace(o.SecureInputCommand)
+	if secureInputCommand == "" {
+		secureInputCommand = "secure-targeted-input"
+	}
+	notifyProvider := strings.TrimSpace(o.NotifyProvider)
+	if notifyProvider == "" {
+		notifyProvider = "openclaw-cli"
+	}
+	notifyOpenClawCmd := strings.TrimSpace(o.NotifyOpenClawCmd)
+	if notifyOpenClawCmd == "" {
+		notifyOpenClawCmd = "openclaw"
+	}
+	notifyChannel := strings.TrimSpace(o.NotifyChannel)
+	if notifyChannel == "" {
+		notifyChannel = "discord"
+	}
+	loginURL := strings.TrimSpace(o.LoginURL)
+	if loginURL == "" {
+		loginURL = "https://outlook.office.com/mail/"
+	}
 
 	return Options{
-		StateDir:              stateDir,
-		SocketPath:            socketPath,
-		LockPath:              lockPath,
-		StatusPath:            statusPath,
-		DefaultCommandTimeout: timeout,
-		MaxQueueSize:          maxQueueSize,
-		MaxRequestBytes:       maxRequestBytes,
-		CDPPort:               o.CDPPort,
-		RejectNewWhilePaused:  o.RejectNewWhilePaused,
+		StateDir:                         stateDir,
+		SocketPath:                       socketPath,
+		LockPath:                         lockPath,
+		StatusPath:                       statusPath,
+		DefaultCommandTimeout:            timeout,
+		AuthRecoveryTimeout:              authRecoveryTimeout,
+		AuthProbeInterval:                authProbeInterval,
+		MaxQueueSize:                     maxQueueSize,
+		MaxRequestBytes:                  maxRequestBytes,
+		MaxResponseBytes:                 maxResponseBytes,
+		CDPPort:                          o.CDPPort,
+		RejectNewWhilePaused:             o.RejectNewWhilePaused,
+		CoalesceIdenticalReads:           o.CoalesceIdenticalReads,
+		DuplicateWriteWindowMail:         duplicateWriteWindowMail,
+		DuplicateWriteWindowCalendar:     duplicateWriteWindowCalendar,
+		WriteRateLimitPerMinute:          writeRateLimitPerMinute,
+		RecipientWriteRateLimitPerMinute: recipientWriteRateLimitPerMinute,
+		SecureInputCommand:               secureInputCommand,
+		NotifyProvider:                   notifyProvider,
+		NotifyOpenClawCmd:                notifyOpenClawCmd,
+		NotifyChannel:                    notifyChannel,
+		NotifyTarget:                     strings.TrimSpace(o.NotifyTarget),
+		LoginURL:                         loginURL,
+		Allowlist:                        append([]string{}, o.Allowlist...),
+		Readonly:                         o.Readonly,
 	}
 }

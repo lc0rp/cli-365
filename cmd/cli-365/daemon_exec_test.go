@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,7 +50,7 @@ func runDirectCLI(t *testing.T, argv []string) cliInvocationResult {
 	exitCode := 0
 	stdout, stderr, err := captureProcessStdio(func() {
 		exitCode = runCLI(context.Background(), append([]string{"cli-365"}, argv...), cliAppOptions{})
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("captureProcessStdio() error: %v", err)
 	}
@@ -78,7 +81,7 @@ func runDaemonCLI(t *testing.T, socketPath string, argv []string) cliInvocationR
 
 func TestDaemonInProcessDispatchParity(t *testing.T) {
 	opts := daemonTestOptions(t)
-	srv := daemon.NewServer(opts, daemonExecFunc())
+	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -136,5 +139,30 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for daemon shutdown")
+	}
+}
+
+func TestCaptureProcessStdioMaxBytes(t *testing.T) {
+	outPayload := strings.Repeat("o", 4096)
+	errPayload := strings.Repeat("e", 4096)
+
+	stdout, stderr, err := captureProcessStdio(func() {
+		_, _ = io.WriteString(os.Stdout, outPayload)
+		_, _ = io.WriteString(os.Stderr, errPayload)
+	}, 128)
+	if err != nil {
+		t.Fatalf("captureProcessStdio() error: %v", err)
+	}
+	if len(stdout) != 128 {
+		t.Fatalf("stdout length = %d, want 128", len(stdout))
+	}
+	if len(stderr) != 128 {
+		t.Fatalf("stderr length = %d, want 128", len(stderr))
+	}
+	if stdout != outPayload[:128] {
+		t.Fatalf("stdout mismatch")
+	}
+	if stderr != errPayload[:128] {
+		t.Fatalf("stderr mismatch")
 	}
 }

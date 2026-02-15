@@ -29,6 +29,7 @@ type AuthConfig struct {
 	Tenant      string   `yaml:"tenant"`
 	AccountHint string   `yaml:"account_hint"`
 	Readonly    bool     `yaml:"readonly"`
+	SecureInput string   `yaml:"secure_input"`
 	Scopes      []string `yaml:"scopes"`
 }
 
@@ -44,6 +45,7 @@ type DaemonConfig struct {
 	StatusPath                       string             `yaml:"status_path"`
 	MaxQueueSize                     int                `yaml:"max_queue_size"`
 	MaxRequestBytes                  int                `yaml:"max_request_bytes"`
+	MaxResponseBytes                 int                `yaml:"max_response_bytes"`
 	DefaultCommandTimeout            time.Duration      `yaml:"default_command_timeout"`
 	AuthRecoveryTimeout              time.Duration      `yaml:"auth_recovery_timeout"`
 	RejectNewWhileAuthPaused         bool               `yaml:"reject_new_while_auth_paused"`
@@ -76,6 +78,7 @@ func Default() Config {
 			Tenant:      "common",
 			AccountHint: "",
 			Readonly:    false,
+			SecureInput: "secure-targeted-input",
 			Scopes:      []string{"mail.readwrite", "mail.send"},
 		},
 		Security: SecurityConfig{
@@ -89,6 +92,7 @@ func Default() Config {
 			StatusPath:                       "",
 			MaxQueueSize:                     64,
 			MaxRequestBytes:                  1024 * 1024,
+			MaxResponseBytes:                 1024 * 1024,
 			DefaultCommandTimeout:            2 * time.Minute,
 			AuthRecoveryTimeout:              5 * time.Minute,
 			RejectNewWhileAuthPaused:         true,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -12,13 +13,13 @@ import (
 
 var stdioCaptureMu sync.Mutex
 
-func daemonExecFunc() daemon.ExecFunc {
+func daemonExecFunc(maxResponseBytes int) daemon.ExecFunc {
 	return func(ctx context.Context, argv []string, timeout time.Duration) daemon.ExecResult {
-		return runCLIInProcess(ctx, argv, timeout)
+		return runCLIInProcess(ctx, argv, timeout, maxResponseBytes)
 	}
 }
 
-func runCLIInProcess(parent context.Context, argv []string, timeout time.Duration) daemon.ExecResult {
+func runCLIInProcess(parent context.Context, argv []string, timeout time.Duration, maxCaptureBytes int) daemon.ExecResult {
 	if len(argv) == 0 {
 		return daemon.ExecResult{
 			ExitCode: 1,
@@ -36,7 +37,7 @@ func runCLIInProcess(parent context.Context, argv []string, timeout time.Duratio
 		exitCode = runCLI(runCtx, args, cliAppOptions{
 			DisableDaemonForwarding: true,
 		})
-	})
+	}, maxCaptureBytes)
 
 	result := daemon.ExecResult{
 		Stdout:   stdout,
@@ -59,7 +60,7 @@ func runCLIInProcess(parent context.Context, argv []string, timeout time.Duratio
 	return result
 }
 
-func captureProcessStdio(run func()) (string, string, error) {
+func captureProcessStdio(run func(), maxBytes int) (string, string, error) {
 	stdioCaptureMu.Lock()
 	defer stdioCaptureMu.Unlock()
 
@@ -81,9 +82,9 @@ func captureProcessStdio(run func()) (string, string, error) {
 
 	readPipe := func(file *os.File, ch chan<- readResult) {
 		defer close(ch)
-		data, readErr := io.ReadAll(file)
+		data, readErr := readBoundedOutput(file, maxBytes)
 		_ = file.Close()
-		ch <- readResult{data: string(data), err: readErr}
+		ch <- readResult{data: data, err: readErr}
 	}
 
 	stdoutCh := make(chan readResult, 1)
@@ -106,6 +107,40 @@ func captureProcessStdio(run func()) (string, string, error) {
 	stderrRes := <-stderrCh
 
 	return stdoutRes.data, stderrRes.data, firstError(closeErr, stdoutRes.err, stderrRes.err)
+}
+
+func readBoundedOutput(r io.Reader, maxBytes int) (string, error) {
+	if maxBytes <= 0 {
+		data, err := io.ReadAll(r)
+		return string(data), err
+	}
+
+	var out bytes.Buffer
+	buf := make([]byte, 32*1024)
+	written := 0
+
+	for {
+		n, err := r.Read(buf)
+		if n > 0 && written < maxBytes {
+			keep := n
+			if written+keep > maxBytes {
+				keep = maxBytes - written
+			}
+			if keep > 0 {
+				_, _ = out.Write(buf[:keep])
+				written += keep
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return out.String(), nil
 }
 
 func firstError(errs ...error) error {

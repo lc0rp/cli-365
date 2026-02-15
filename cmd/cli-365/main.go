@@ -68,6 +68,10 @@ func newCLIApp(opts cliAppOptions) *cli.App {
 				Name:  "daemon",
 				Usage: "Route command execution through local cli-365 daemon",
 			},
+			&cli.BoolFlag{
+				Name:  "allow-duplicate-write",
+				Usage: "Allow duplicate write operations even when daemon suppression is active",
+			},
 		},
 		ExitErrHandler: func(_ *cli.Context, _ error) {},
 		Before:         newAppBefore(opts),

@@ -10,7 +10,7 @@ read_when: Need daemon v1 contracts, defaults, architecture, and acceptance crit
 
 # cli-365 daemon mode v1 spec
 
-Status: In progress (Phase A complete; Phase B queue/transport + in-process dispatch + CDP mismatch guard in place on 2026-02-15; auth recovery pending)
+Status: In progress (Phase A/B complete; Phase C partial; Phase D auth recovery coordinator implemented with unit coverage on 2026-02-15; Phase E coalescing + duplicate/throttle flood controls in place; Phase F read-retry/no-write-replay baseline implemented)
 Owner: cli-365
 Type: Spec / architecture
 Last updated: 2026-02-15
@@ -345,12 +345,16 @@ For upstream `429` and transient `5xx`:
 ## 12) Config additions (proposed)
 
 ```yaml
+auth:
+  secure_input: "secure-targeted-input" # resolved from PATH by daemon auth recovery
+
 daemon:
   enabled: false                 # gated behind --daemon initially
   socket_path: ""               # default: $XDG_STATE_HOME/cli-365/daemon.sock
   lock_path: ""                 # default: $XDG_STATE_HOME/cli-365/daemon.lock
   max_queue_size: 64
   max_request_bytes: 1048576
+  max_response_bytes: 1048576
   default_command_timeout: "2m"
   auth_recovery_timeout: "5m"
   reject_new_while_auth_paused: true

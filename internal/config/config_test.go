@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDefault(t *testing.T) {
@@ -21,17 +22,38 @@ func TestDefault(t *testing.T) {
 	if len(cfg.Auth.Scopes) == 0 {
 		t.Error("Auth.Scopes should not be empty")
 	}
+	if cfg.Auth.SecureInput != "secure-targeted-input" {
+		t.Errorf("Auth.SecureInput = %q, want secure-targeted-input", cfg.Auth.SecureInput)
+	}
 	if cfg.Daemon.MaxQueueSize != 64 {
 		t.Errorf("Daemon.MaxQueueSize = %d, want 64", cfg.Daemon.MaxQueueSize)
 	}
 	if cfg.Daemon.MaxRequestBytes != 1024*1024 {
 		t.Errorf("Daemon.MaxRequestBytes = %d, want 1048576", cfg.Daemon.MaxRequestBytes)
 	}
+	if cfg.Daemon.MaxResponseBytes != 1024*1024 {
+		t.Errorf("Daemon.MaxResponseBytes = %d, want 1048576", cfg.Daemon.MaxResponseBytes)
+	}
 	if cfg.Daemon.DefaultCommandTimeout <= 0 {
 		t.Errorf("Daemon.DefaultCommandTimeout = %s, want > 0", cfg.Daemon.DefaultCommandTimeout)
 	}
 	if !cfg.Daemon.RejectNewWhileAuthPaused {
 		t.Error("Daemon.RejectNewWhileAuthPaused should be true")
+	}
+	if !cfg.Daemon.CoalesceIdenticalReads {
+		t.Error("Daemon.CoalesceIdenticalReads should be true")
+	}
+	if cfg.Daemon.DuplicateWriteWindowMail != 12*time.Hour {
+		t.Errorf("Daemon.DuplicateWriteWindowMail = %s, want 12h", cfg.Daemon.DuplicateWriteWindowMail)
+	}
+	if cfg.Daemon.DuplicateWriteWindowCalendar != time.Hour {
+		t.Errorf("Daemon.DuplicateWriteWindowCalendar = %s, want 1h", cfg.Daemon.DuplicateWriteWindowCalendar)
+	}
+	if cfg.Daemon.WriteRateLimitPerMinute != 20 {
+		t.Errorf("Daemon.WriteRateLimitPerMinute = %d, want 20", cfg.Daemon.WriteRateLimitPerMinute)
+	}
+	if cfg.Daemon.RecipientWriteRateLimitPerMinute != 6 {
+		t.Errorf("Daemon.RecipientWriteRateLimitPerMinute = %d, want 6", cfg.Daemon.RecipientWriteRateLimitPerMinute)
 	}
 }
 
@@ -160,6 +182,7 @@ func TestAuthConfig(t *testing.T) {
 		Tenant:      "mytenant",
 		AccountHint: "user@example.com",
 		Readonly:    true,
+		SecureInput: "secure-targeted-input",
 		Scopes:      []string{"mail.read"},
 	}
 
@@ -171,6 +194,9 @@ func TestAuthConfig(t *testing.T) {
 	}
 	if len(cfg.Scopes) != 1 {
 		t.Errorf("Scopes length = %d, want 1", len(cfg.Scopes))
+	}
+	if cfg.SecureInput == "" {
+		t.Error("SecureInput should not be empty")
 	}
 }
 

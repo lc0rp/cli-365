@@ -17,7 +17,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 ## Pre-dev gate
 
 - [x] Confirm baseline branch builds/tests pass before daemon work starts (`go test ./...`).
-- [ ] Confirm secure-input config path is valid (`auth.secure_input`) for auth recovery flow.
+- [x] Confirm secure-input config path is valid (`auth.secure_input`) for auth recovery flow.
 - [x] Confirm secure-input dependency contract: source repo `/path/to/projects/secure-targeted-input`, daemon target binary `secure-targeted-input` resolved from `PATH`.
 - [ ] Confirm OpenClaw CLI is available on target dev/test hosts.
 
@@ -54,47 +54,47 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 ### Phase D: auth recovery path
 
-- [ ] Pause queue on auth-required signal.
-- [ ] Reject new requests while paused (`AUTH_PAUSED`).
-- [ ] Invoke secure input (`secure-targeted-input` binary from `PATH`) + OpenClaw notification.
-- [ ] Timeout pending requests at `auth_recovery_timeout = 5m` (`AUTH_TIMEOUT`).
-- [ ] Model explicit state machine transitions (`READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`).
-- [ ] Fail all queued pending requests on auth timeout (fan-out).
-- [ ] Include login URL + queue depth in auth-required/auth-timeout notifications.
+- [x] Pause queue on auth-required signal.
+- [x] Reject new requests while paused (`AUTH_PAUSED`).
+- [x] Invoke secure input (`secure-targeted-input` binary from `PATH`) + OpenClaw notification.
+- [x] Timeout pending requests at `auth_recovery_timeout = 5m` (`AUTH_TIMEOUT`).
+- [x] Model explicit state machine transitions (`READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`).
+- [x] Fail all queued pending requests on auth timeout (fan-out).
+- [x] Include login URL + queue depth in auth-required/auth-timeout notifications.
 
 ### Phase E: coalescing + flood controls
 
-- [ ] Coalesce identical read-class requests only.
-- [ ] Keep write requests non-coalesced.
-- [ ] Keep `mail attachments download` non-coalesced (filesystem side effects).
-- [ ] Implement coalesce key normalization (command path, semantic args, identity context, output mode).
-- [ ] Add duplicate write suppression windows (mail 12h, calendar 1h).
-- [ ] Add global override flag: `--allow-duplicate-write`.
-- [ ] Add per-recipient + global write throttles.
-- [ ] Return deterministic `DUPLICATE_WRITE_SUSPECTED` on duplicate suppression hits.
+- [x] Coalesce identical read-class requests only.
+- [x] Keep write requests non-coalesced.
+- [x] Keep `mail attachments download` non-coalesced (filesystem side effects).
+- [x] Implement coalesce key normalization (command path, semantic args, identity context, output mode).
+- [x] Add duplicate write suppression windows (mail 12h, calendar 1h).
+- [x] Add global override flag: `--allow-duplicate-write`.
+- [x] Add per-recipient + global write throttles.
+- [x] Return deterministic `DUPLICATE_WRITE_SUSPECTED` on duplicate suppression hits.
 
 ### Phase F: hardening + parity tests
 
-- [ ] Retry/backoff for read-command transient `429/5xx`.
-- [ ] No automatic replay for non-idempotent writes.
+- [x] Retry/backoff for read-command transient `429/5xx`.
+- [x] No automatic replay for non-idempotent writes.
 - [ ] Redact token/canary from logs.
 - [ ] Emit structured daemon logs without auth/token leakage.
-- [ ] Keep allowlist/readonly enforcement server-side in daemon path.
-- [ ] Add IPC payload size limits and command-table validation. (payload limit done, command-table validation pending)
+- [x] Keep allowlist/readonly enforcement server-side in daemon path.
+- [x] Add IPC payload size limits and command-table validation.
 - [x] Add panic guard around request execution.
-- [ ] Bound in-memory response buffering for large outputs.
+- [x] Bound in-memory response buffering for large outputs.
 - [ ] Implement graceful daemon stop with queue drain policy + browser cleanup.
 - [ ] Add contract tests for daemon vs non-daemon output parity. (baseline parity tests added for deterministic commands)
 
 ## Required test stories
 
 - [x] Unit: queue FIFO/capacity/pause-resume/drain-fail.
-- [ ] Unit: coalescing (reads coalesce, writes do not).
-- [ ] Unit: flood controls (duplicate window + per-recipient/global buckets).
-- [ ] Unit: auth recovery coordinator transitions and timeout fan-out.
+- [x] Unit: coalescing (reads coalesce, writes do not).
+- [x] Unit: flood controls (duplicate window + per-recipient/global buckets).
+- [x] Unit: auth recovery coordinator transitions and timeout fan-out.
 - [x] Unit: `CDP_PORT_MISMATCH` path.
-- [ ] Integration: first `--daemon` call auto-starts daemon.
-- [ ] Integration: later calls reuse same daemon/browser/tab.
+- [x] Integration: first `--daemon` call auto-starts daemon.
+- [ ] Integration: later calls reuse same daemon/browser/tab. (daemon process reuse covered; browser/tab reuse pending)
 - [ ] Integration: browser crash recovery.
 - [ ] Integration: auth-required triggers pause + secure-input + notifier.
 - [ ] Integration: auth timeout fails pending requests with stable error codes.
@@ -105,7 +105,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 
 - [ ] End-to-end `--daemon` works on Linux and macOS.
 - [x] Queue is FIFO + bounded with deterministic overflow behavior.
-- [ ] Auth pause/recovery path works with timeout fan-out errors.
+- [x] Auth pause/recovery path works with timeout fan-out errors.
 - [x] `--cdp-port` mismatch is enforced.
 - [ ] OpenClaw notifications fire on auth-required and auth-timeout.
 - [ ] No bearer/canary token leakage in daemon logs.

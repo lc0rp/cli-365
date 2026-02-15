@@ -11,7 +11,7 @@ read_when: Starting daemon mode implementation work.
 # Implement daemon mode v1
 
 This page translates `docs/builders/specs/daemon-v1.md` into coding order.  
-Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete)
+Status: in progress (Phase A complete, Phase B queue/transport + in-process dispatch complete, Phase C `CDP_PORT_MISMATCH` guard complete, Phase D auth coordinator complete at unit level, Phase F retry/no-replay baseline complete)
 
 ## Scope
 
@@ -66,28 +66,29 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 
 ### Phase D: Auth recovery + notifications
 
-- [ ] Auth state machine: `READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`.
-- [ ] Pause queue consumption on auth required.
-- [ ] Reject new work while paused (`AUTH_PAUSED`).
-- [ ] Trigger secure-input command + OpenClaw CLI notification.
-- [ ] Timeout fan-out failure (`AUTH_TIMEOUT`) after 5m default.
+- [x] Auth state machine: `READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`.
+- [x] Pause queue consumption on auth required.
+- [x] Reject new work while paused (`AUTH_PAUSED`).
+- [x] Trigger secure-input command + OpenClaw CLI notification.
+- [x] Timeout fan-out failure (`AUTH_TIMEOUT`) after 5m default.
 
 ### Phase E: Coalescing + flood controls
 
-- [ ] Coalesce identical read-class commands only.
-- [ ] Keep write commands non-coalesced.
-- [ ] Add duplicate write suppression windows:
+- [x] Coalesce identical read-class commands only.
+- [x] Keep write commands non-coalesced.
+- [x] Add duplicate write suppression windows:
   - mail writes: 12h
   - calendar writes: 1h
-- [ ] Add `--allow-duplicate-write` override.
-- [ ] Add per-recipient and global write rate limits.
+- [x] Add `--allow-duplicate-write` override.
+- [x] Add per-recipient and global write rate limits.
 
 ### Phase F: Retry + hardening
 
-- [ ] Read-command retry/backoff for transient `429/5xx`.
-- [ ] No automatic replay for non-idempotent writes.
+- [x] Read-command retry/backoff for transient `429/5xx`.
+- [x] No automatic replay for non-idempotent writes.
 - [ ] Redact tokens/canary in all logs.
-- [ ] Add payload size limits and command table validation. (payload limits done; command table validation pending)
+- [x] Add payload size limits and command table validation.
+- [x] Bound in-memory response buffering for large outputs.
 - [ ] Complete contract tests to match non-daemon command semantics. (baseline deterministic parity tests added)
 
 ## Test gate before merge
