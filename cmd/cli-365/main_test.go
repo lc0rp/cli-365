@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestDaemonFlagEnabled(t *testing.T) {
 	tests := []struct {
@@ -121,5 +125,28 @@ func TestParseTrailingIntFlagIgnoresNonNumeric(t *testing.T) {
 	_, ok := parseTrailingIntFlag([]string{"report", "-not"}, []string{"--limit", "-n"})
 	if ok {
 		t.Fatalf("expected -not to be ignored")
+	}
+}
+
+func TestVersionFlag(t *testing.T) {
+	exitCode := 0
+	stdout, stderr, err := captureProcessStdio(func() {
+		exitCode = runCLI(
+			context.Background(),
+			[]string{"cli-365", "--version"},
+			cliAppOptions{DisableDaemonForwarding: true},
+		)
+	}, 0)
+	if err != nil {
+		t.Fatalf("captureProcessStdio() error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0 (stderr=%q)", exitCode, stderr)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, version) {
+		t.Fatalf("stdout = %q, want to contain version %q", stdout, version)
 	}
 }

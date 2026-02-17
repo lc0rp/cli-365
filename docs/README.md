@@ -21,10 +21,12 @@ Audience-first routing for repository docs. Keep pages intent-pure:
 
 - Planning daemon implementation: `docs/builders/specs/daemon-v1.md`, `docs/builders/daemon-v1-implementation.md`, `docs/builders/backlog/daemon-v1-todo.md`.
 - Verifying current CLI behavior: `README.md`, `docs/builders/status/mvp-status.md`, `docs/builders/specs/mvp-spec.md`, `docs/builders/backlog/mvp-todo.md`.
+- Cutting a release/tag: `docs/RELEASING.md`.
 
 ## Audience hubs
 
 - Builders: `docs/builders/index.md`
+- Release: `docs/RELEASING.md`
 - Testers: pending (add once daemon v1 tests land)
 - Operators: pending (add once daemon runbook exists)
 - Users: `README.md`

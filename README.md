@@ -111,6 +111,34 @@ Available:
 - `--json`: JSON output for any command
 - `--cdp-port`: override configured CDP port for this run
 - `--readonly`: block write commands (send/draft/delete)
+- `--version`: print CLI version
+
+### Versioning (SemVer)
+
+`cli-365` uses semantic versioning for build output. The default local version is `0.0.0-dev`.
+Release builds should stamp the version at build time:
+
+```bash
+go build -ldflags "-X main.version=1.2.3" -o ~/.local/bin/cli-365 ./cmd/cli-365
+```
+
+Check installed version:
+
+```bash
+cli-365 --version
+```
+
+### Release Automation
+
+Use the scripted release flow to bump semver, update changelog, run tests, and tag:
+
+```bash
+scripts/release.sh patch
+scripts/release.sh minor
+scripts/release.sh major
+```
+
+See `docs/RELEASING.md` for full workflow details and `--push` / `--dry-run` modes.
 
 ### Browser Management
 

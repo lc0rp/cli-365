@@ -34,8 +34,9 @@ func main() {
 
 func newCLIApp(opts cliAppOptions) *cli.App {
 	return &cli.App{
-		Name:  "cli-365",
-		Usage: "CLI for Outlook OWA via a managed browser",
+		Name:    "cli-365",
+		Usage:   "CLI for Outlook OWA via a managed browser",
+		Version: version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "config",
