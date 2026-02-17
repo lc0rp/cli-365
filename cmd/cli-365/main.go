@@ -51,22 +51,13 @@ func newCLIApp(opts cliAppOptions) *cli.App {
 				Name:  "readonly",
 				Usage: "Restrict to read-only operations (no send/draft/delete)",
 			},
-			&cli.BoolFlag{
-				Name:  "ensure-cdp",
-				Usage: "Start managed browser if CDP is unavailable and wait for login",
-			},
-			&cli.DurationFlag{
-				Name:  "ensure-cdp-timeout",
-				Usage: "How long to wait for CDP/login when --ensure-cdp is set",
-				Value: 5 * time.Minute,
-			},
 			&cli.IntFlag{
 				Name:  "cdp-port",
 				Usage: "Override browser.cdp_port for this run",
 			},
 			&cli.BoolFlag{
 				Name:  "daemon",
-				Usage: "Route command execution through local cli-365 daemon",
+				Usage: "Override daemon routing for this run (true/false)",
 			},
 			&cli.BoolFlag{
 				Name:  "allow-duplicate-write",
@@ -119,26 +110,33 @@ func runCLIApp(ctx context.Context, app *cli.App, args []string) int {
 func newAppBefore(opts cliAppOptions) func(*cli.Context) error {
 	return func(c *cli.Context) error {
 		commandPath := buildCommandPath(c)
-		if !opts.DisableDaemonForwarding && c.Bool("daemon") && !strings.HasPrefix(commandPath, "daemon") && commandPath != "" {
-			if err := enforceSecurityPolicy(c); err != nil {
+		cfg, err := loadConfig(c)
+		if err != nil {
+			return err
+		}
+		if shouldForwardViaDaemon(c, cfg, opts, commandPath) {
+			if err := enforceSecurityPolicyWithConfig(c, cfg); err != nil {
 				return err
 			}
 			return runViaDaemon(c)
 		}
-		return enforceSecurityPolicy(c)
+		return enforceSecurityPolicyWithConfig(c, cfg)
 	}
 }
 
 // enforceSecurityPolicy checks allowlist and readonly restrictions before command execution.
 func enforceSecurityPolicy(c *cli.Context) error {
-	// Skip check for help commands
-	if c.NArg() == 0 || c.Args().First() == "help" {
-		return nil
-	}
-
 	cfg, err := loadConfig(c)
 	if err != nil {
 		return err
+	}
+	return enforceSecurityPolicyWithConfig(c, cfg)
+}
+
+func enforceSecurityPolicyWithConfig(c *cli.Context, cfg config.Config) error {
+	// Skip check for help commands
+	if c.NArg() == 0 || c.Args().First() == "help" {
+		return nil
 	}
 
 	// Build command path from args
@@ -152,6 +150,23 @@ func enforceSecurityPolicy(c *cli.Context) error {
 
 	// Check security policy
 	return policy.Check(commandPath)
+}
+
+func shouldForwardViaDaemon(c *cli.Context, cfg config.Config, opts cliAppOptions, commandPath string) bool {
+	if opts.DisableDaemonForwarding {
+		return false
+	}
+	if commandPath == "" || strings.HasPrefix(commandPath, "daemon") {
+		return false
+	}
+	return daemonFlagEnabled(c.IsSet("daemon"), c.Bool("daemon"), cfg.Daemon.Enabled)
+}
+
+func daemonFlagEnabled(flagSet bool, flagValue bool, configEnabled bool) bool {
+	if flagSet {
+		return flagValue
+	}
+	return configEnabled
 }
 
 // buildCommandPath extracts the command path from CLI context.
@@ -263,93 +278,7 @@ func ensureBrowser(ctx context.Context, c *cli.Context, cfg config.Config) (*rod
 		cfg.Browser.CDPPort = c.Int("cdp-port")
 		cfg.Browser.CDPEndpoint = ""
 	}
-	if !c.Bool("ensure-cdp") {
-		return browser.EnsureBrowser(ctx, cfg)
-	}
-
-	if cfg.Browser.CDPPort > 0 {
-		if endpoint, err := browser.ResolveWSEndpoint(cfg.Browser.CDPPort); err == nil {
-			if b, err := browser.ConnectEndpoint(endpoint); err == nil {
-				_ = browser.SaveRuntime(&browser.RuntimeInfo{
-					WSEndpoint: endpoint,
-					PID:        0,
-					Managed:    false,
-					StartedAt:  time.Now(),
-				})
-				if err := ensureLoggedIn(c, b); err != nil {
-					return nil, err
-				}
-				return b, nil
-			}
-		}
-		fmt.Printf("[ensure-cdp] CDP unavailable on port %d; starting managed browser...\n", cfg.Browser.CDPPort)
-		cfgNoCDP := cfg
-		cfgNoCDP.Browser.CDPEndpoint = ""
-		b, err := browser.EnsureBrowser(ctx, cfgNoCDP)
-		if err != nil {
-			return nil, err
-		}
-		if err := ensureLoggedIn(c, b); err != nil {
-			return nil, err
-		}
-		return b, nil
-	}
-
-	if cfg.Browser.CDPEndpoint != "" {
-		b, err := browser.ConnectEndpoint(cfg.Browser.CDPEndpoint)
-		if err == nil {
-			_ = browser.SaveRuntime(&browser.RuntimeInfo{
-				WSEndpoint: cfg.Browser.CDPEndpoint,
-				PID:        0,
-				Managed:    false,
-				StartedAt:  time.Now(),
-			})
-			if err := ensureLoggedIn(c, b); err != nil {
-				return nil, err
-			}
-			return b, nil
-		}
-		fmt.Printf("[ensure-cdp] CDP unavailable at %s; starting managed browser...\n", cfg.Browser.CDPEndpoint)
-	}
-
-	cfgNoCDP := cfg
-	cfgNoCDP.Browser.CDPEndpoint = ""
-	b, err := browser.EnsureBrowser(ctx, cfgNoCDP)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureLoggedIn(c, b); err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-func ensureLoggedIn(c *cli.Context, b *rod.Browser) error {
-	client := owa.NewClient(b)
-	if err := client.Connect(); err != nil {
-		return err
-	}
-	page := client.Page()
-	if owa.IsLoggedIn(page) {
-		return nil
-	}
-	if info, err := page.Info(); err == nil {
-		if info.URL == "" || info.URL == "about:blank" {
-			if err := owa.NavigateToOWA(page); err != nil {
-				return err
-			}
-		}
-	} else {
-		if err := owa.NavigateToOWA(page); err != nil {
-			return err
-		}
-	}
-	fmt.Println("[ensure-cdp] Please complete login in the browser window...")
-	timeout := c.Duration("ensure-cdp-timeout")
-	if timeout <= 0 {
-		timeout = 5 * time.Minute
-	}
-	return owa.WaitForLoggedIn(page, timeout)
+	return browser.EnsureBrowser(ctx, cfg)
 }
 
 // getTokenStorage returns the appropriate token storage based on config.
@@ -476,30 +405,57 @@ func authCommand() *cli.Command {
 				Name:  "status",
 				Usage: "Show current authentication status",
 				Action: func(c *cli.Context) error {
-					tokens, err := owa.LoadTokens()
-					if err != nil {
-						if os.IsNotExist(err) {
-							fmt.Println("Not authenticated")
-							return nil
-						}
-						return err
+					var (
+						tokens  *owa.Tokens
+						loadErr error
+					)
+					tokens, loadErr = owa.LoadTokens()
+					if loadErr != nil && !os.IsNotExist(loadErr) {
+						return loadErr
+					}
+
+					browserProbe := probeBrowserStatus(1500 * time.Millisecond)
+					liveProbe := probeAuthStatusLive(browserProbe)
+					authenticated := liveProbe.Authenticated
+					userEmail := strings.TrimSpace(liveProbe.UserEmail)
+					if userEmail == "" && tokens != nil {
+						userEmail = strings.TrimSpace(tokens.UserEmail)
 					}
 
 					if c.Bool("json") {
-						return outputJSON(map[string]interface{}{
-							"authenticated": true,
-							"user_email":    tokens.UserEmail,
-							"extracted_at":  tokens.ExtractedAt,
-							"has_canary":    tokens.Canary != "",
-							"has_bearer":    tokens.Bearer != "",
-						})
+						payload := map[string]interface{}{
+							"authenticated":       authenticated,
+							"user_email":          userEmail,
+							"live_session":        liveProbe.Authenticated,
+							"browser_running":     browserProbe.Running,
+							"pid_alive":           browserProbe.PIDAlive,
+							"endpoint_reachable":  browserProbe.EndpointReachable,
+							"ws_endpoint":         browserProbe.WSEndpoint,
+							"browser_probe_error": browserProbe.Error,
+						}
+						if tokens != nil {
+							payload["extracted_at"] = tokens.ExtractedAt
+							payload["has_canary"] = tokens.Canary != ""
+							payload["has_bearer"] = tokens.Bearer != ""
+						}
+						return outputJSON(payload)
+					}
+
+					if !authenticated {
+						fmt.Println("Not authenticated")
+						if tokens != nil && !tokens.ExtractedAt.IsZero() {
+							fmt.Printf("Cached token extracted at: %s\n", tokens.ExtractedAt.Format(time.RFC3339))
+						}
+						return nil
 					}
 
 					fmt.Println("Authenticated: yes")
-					if tokens.UserEmail != "" {
-						fmt.Printf("User: %s\n", tokens.UserEmail)
+					if userEmail != "" {
+						fmt.Printf("User: %s\n", userEmail)
 					}
-					fmt.Printf("Token extracted at: %s\n", tokens.ExtractedAt.Format(time.RFC3339))
+					if tokens != nil && !tokens.ExtractedAt.IsZero() {
+						fmt.Printf("Token extracted at: %s\n", tokens.ExtractedAt.Format(time.RFC3339))
+					}
 					return nil
 				},
 			},
@@ -547,27 +503,15 @@ func browserCommand() *cli.Command {
 				Name:  "status",
 				Usage: "Show current browser status",
 				Action: func(c *cli.Context) error {
-					rt, err := browser.Status()
-					if err != nil {
-						if os.IsNotExist(err) {
-							if c.Bool("json") {
-								return outputJSON(map[string]interface{}{"running": false})
-							}
-							fmt.Println("stopped")
-							return nil
-						}
-						return err
-					}
+					probe := probeBrowserStatus(1500 * time.Millisecond)
 					if c.Bool("json") {
-						return outputJSON(map[string]interface{}{
-							"running":     true,
-							"managed":     rt.Managed,
-							"pid":         rt.PID,
-							"ws_endpoint": rt.WSEndpoint,
-							"started_at":  rt.StartedAt,
-						})
+						return outputJSON(probe)
 					}
-					fmt.Printf("managed=%t pid=%d\nws endpoint: %s\n", rt.Managed, rt.PID, rt.WSEndpoint)
+					if !probe.Running {
+						fmt.Println("stopped")
+						return nil
+					}
+					fmt.Printf("managed=%t pid=%d\nws endpoint: %s\n", probe.Managed, probe.PID, probe.WSEndpoint)
 					return nil
 				},
 			},

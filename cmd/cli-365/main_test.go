@@ -2,6 +2,54 @@ package main
 
 import "testing"
 
+func TestDaemonFlagEnabled(t *testing.T) {
+	tests := []struct {
+		name          string
+		flagSet       bool
+		flagValue     bool
+		configEnabled bool
+		want          bool
+	}{
+		{
+			name:          "config true when flag not set",
+			flagSet:       false,
+			flagValue:     false,
+			configEnabled: true,
+			want:          true,
+		},
+		{
+			name:          "config false when flag not set",
+			flagSet:       false,
+			flagValue:     false,
+			configEnabled: false,
+			want:          false,
+		},
+		{
+			name:          "explicit flag true overrides config false",
+			flagSet:       true,
+			flagValue:     true,
+			configEnabled: false,
+			want:          true,
+		},
+		{
+			name:          "explicit flag false overrides config true",
+			flagSet:       true,
+			flagValue:     false,
+			configEnabled: true,
+			want:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := daemonFlagEnabled(tt.flagSet, tt.flagValue, tt.configEnabled)
+			if got != tt.want {
+				t.Fatalf("daemonFlagEnabled(%v, %v, %v) = %v, want %v", tt.flagSet, tt.flagValue, tt.configEnabled, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildSearchQuery(t *testing.T) {
 	got, err := buildSearchQuery(
 		"alpha",

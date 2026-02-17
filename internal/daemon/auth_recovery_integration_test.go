@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -47,12 +48,15 @@ func TestServerAuthRecoveryRejectsNewRequestsWhilePaused(t *testing.T) {
 			return false, ctx.Err()
 		}
 	}
-	srv.secureInputRunner = func(_ context.Context, command string) error {
+	srv.secureInputRunner = func(_ context.Context, command string, _ func(string)) error {
 		mu.Lock()
 		secureCalls++
 		mu.Unlock()
-		if command != "secure-targeted-input" {
-			t.Fatalf("secure input command = %q, want secure-targeted-input", command)
+		if !strings.HasPrefix(command, "secure-targeted-input") {
+			t.Fatalf("secure input command = %q, want secure-targeted-input prefix", command)
+		}
+		if !strings.Contains(command, "--selector ") {
+			t.Fatalf("secure input command = %q, want selector defaults", command)
 		}
 		return nil
 	}
@@ -166,7 +170,7 @@ func TestServerAuthRecoveryTimeoutReturnsAuthTimeout(t *testing.T) {
 		}
 	})
 	srv.authProbe = func(_ context.Context) (bool, error) { return false, nil }
-	srv.secureInputRunner = func(ctx context.Context, _ string) error {
+	srv.secureInputRunner = func(ctx context.Context, _ string, _ func(string)) error {
 		<-ctx.Done()
 		return ctx.Err()
 	}

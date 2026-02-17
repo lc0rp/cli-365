@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -89,6 +92,24 @@ func Start(_ context.Context, cfg config.Config) (*RuntimeInfo, error) {
 
 func Status() (*RuntimeInfo, error) {
 	return LoadRuntime()
+}
+
+// PIDAlive reports whether the process id appears alive.
+func PIDAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if err := proc.Signal(syscall.Signal(0)); err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			return true
+		}
+		return false
+	}
+	return true
 }
 
 func Stop() error {
@@ -196,6 +217,64 @@ func ResolveWSEndpoint(port int) (string, error) {
 	return payload.WebSocketDebuggerURL, nil
 }
 
+func versionEndpointFromWS(wsEndpoint string) (string, error) {
+	wsEndpoint = strings.TrimSpace(wsEndpoint)
+	if wsEndpoint == "" {
+		return "", errors.New("cdp endpoint is empty")
+	}
+	parsed, err := url.Parse(wsEndpoint)
+	if err != nil {
+		return "", err
+	}
+	switch parsed.Scheme {
+	case "ws":
+		parsed.Scheme = "http"
+	case "wss":
+		parsed.Scheme = "https"
+	case "http", "https":
+	default:
+		return "", fmt.Errorf("unsupported endpoint scheme: %s", parsed.Scheme)
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", errors.New("cdp endpoint host is empty")
+	}
+	parsed.Path = "/json/version"
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+// WSEndpointReachable checks whether a CDP websocket endpoint is alive.
+func WSEndpointReachable(wsEndpoint string, timeout time.Duration) (bool, error) {
+	versionURL, err := versionEndpointFromWS(wsEndpoint)
+	if err != nil {
+		return false, err
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(versionURL)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, fmt.Errorf("cdp version endpoint returned %s", resp.Status)
+	}
+
+	var payload struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(payload.WebSocketDebuggerURL) == "" {
+		return false, errors.New("cdp websocket endpoint missing")
+	}
+	return true, nil
+}
+
 // EnsureBrowser ensures a browser is running, starting one if needed.
 func EnsureBrowser(ctx context.Context, cfg config.Config) (*rod.Browser, error) {
 	if cfg.Browser.CDPEndpoint != "" {
@@ -254,15 +333,7 @@ func IsRunning() bool {
 		return false
 	}
 	if rt.PID > 0 {
-		proc, err := os.FindProcess(rt.PID)
-		if err != nil {
-			return false
-		}
-		// On Unix, FindProcess always succeeds, so we send signal 0 to check
-		if err := proc.Signal(nil); err != nil {
-			return false
-		}
-		return true
+		return PIDAlive(rt.PID)
 	}
 	return rt.WSEndpoint != ""
 }

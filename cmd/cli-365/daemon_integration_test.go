@@ -86,6 +86,88 @@ func TestDaemonAutoStartAndReuseIntegration(t *testing.T) {
 	}
 }
 
+func TestDaemonStartCommandIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := buildCLIBinary(t)
+	stateHome := t.TempDir()
+	homeDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "daemon.log")
+
+	run := func(args ...string) binaryResult {
+		return runBinary(t, binPath, stateHome, homeDir, args...)
+	}
+
+	defer func() {
+		_ = run("daemon", "stop")
+	}()
+
+	start := run("daemon", "start", "--log-file", logPath)
+	if start.exitCode != 0 {
+		t.Fatalf("daemon start exit=%d stderr=%q", start.exitCode, start.stderr)
+	}
+
+	status1 := run("--json", "daemon", "status")
+	if status1.exitCode != 0 {
+		t.Fatalf("daemon status exit=%d stderr=%q", status1.exitCode, status1.stderr)
+	}
+	var s1 struct {
+		Running bool `json:"running"`
+		PID     int  `json:"pid"`
+	}
+	if err := json.Unmarshal([]byte(status1.stdout), &s1); err != nil {
+		t.Fatalf("parse status1: %v (stdout=%q)", err, status1.stdout)
+	}
+	if !s1.Running || s1.PID <= 0 {
+		t.Fatalf("status1 running=%v pid=%d", s1.Running, s1.PID)
+	}
+
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("log path missing %q: %v", logPath, err)
+	}
+	browserStatus := run("--json", "browser", "status")
+	if browserStatus.exitCode != 0 {
+		t.Fatalf("browser status exit=%d stderr=%q", browserStatus.exitCode, browserStatus.stderr)
+	}
+	var b1 struct {
+		Running bool `json:"running"`
+	}
+	if err := json.Unmarshal([]byte(browserStatus.stdout), &b1); err != nil {
+		t.Fatalf("parse browser status: %v (stdout=%q)", err, browserStatus.stdout)
+	}
+	if !b1.Running {
+		if shouldSkipBrowserIntegration(start.stderr) {
+			t.Skipf("daemon browser warmup prerequisites unavailable: %s", strings.TrimSpace(start.stderr))
+		}
+		t.Fatalf("daemon start should warm browser, running=%v stderr=%q", b1.Running, start.stderr)
+	}
+
+	startAgain := run("daemon", "start", "--log-file", logPath)
+	if startAgain.exitCode != 0 {
+		t.Fatalf("daemon start (again) exit=%d stderr=%q", startAgain.exitCode, startAgain.stderr)
+	}
+
+	status2 := run("--json", "daemon", "status")
+	if status2.exitCode != 0 {
+		t.Fatalf("daemon status (second) exit=%d stderr=%q", status2.exitCode, status2.stderr)
+	}
+	var s2 struct {
+		Running bool `json:"running"`
+		PID     int  `json:"pid"`
+	}
+	if err := json.Unmarshal([]byte(status2.stdout), &s2); err != nil {
+		t.Fatalf("parse status2: %v (stdout=%q)", err, status2.stdout)
+	}
+	if !s2.Running || s2.PID <= 0 {
+		t.Fatalf("status2 running=%v pid=%d", s2.Running, s2.PID)
+	}
+	if s2.PID != s1.PID {
+		t.Fatalf("daemon PID changed between start calls: first=%d second=%d", s1.PID, s2.PID)
+	}
+}
+
 func TestDaemonBrowserStartPrimaryTabReuseIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

@@ -105,3 +105,42 @@ func TestPlanPrimaryTab_NoOWAPagesNoPrimary(t *testing.T) {
 		t.Fatalf("CloseIDs = %v, want empty", got.CloseIDs)
 	}
 }
+
+func TestPlanPrimaryTab_SelectFirstAuthWhenNoOWA(t *testing.T) {
+	pages := []tabSnapshot{
+		{ID: "blank-1", URL: "about:blank"},
+		{ID: "auth-a", URL: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?x=1"},
+		{ID: "auth-b", URL: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?x=2"},
+	}
+
+	got := planPrimaryTab("missing", pages)
+	if got.PrimaryID != "auth-a" {
+		t.Fatalf("PrimaryID = %q, want auth-a", got.PrimaryID)
+	}
+	wantClose := []string{"blank-1", "auth-b"}
+	if !reflect.DeepEqual(got.CloseIDs, wantClose) {
+		t.Fatalf("CloseIDs = %v, want %v", got.CloseIDs, wantClose)
+	}
+}
+
+func TestIsAuthURLForDaemon(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "microsoft online", url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize", want: true},
+		{name: "login live", url: "https://login.live.com/login.srf", want: true},
+		{name: "account live", url: "https://account.live.com/proofs/manage", want: true},
+		{name: "owa mail", url: "https://outlook.office.com/mail/", want: false},
+		{name: "other", url: "https://example.com", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isAuthURLForDaemon(tt.url); got != tt.want {
+				t.Fatalf("isAuthURLForDaemon(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}

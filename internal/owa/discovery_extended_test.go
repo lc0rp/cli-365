@@ -1,6 +1,7 @@
 package owa
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -162,5 +163,43 @@ func TestOWABaseURLConstants(t *testing.T) {
 	}
 	if OWAAPIBase[:8] != "https://" {
 		t.Errorf("OWAAPIBase should start with https://: %s", OWAAPIBase)
+	}
+}
+
+func TestIsNonFatalCanaryEvalError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "security error cookie access denied",
+			err:  errors.New("eval js error: SecurityError: Failed to read the 'cookie' property from 'Document': Access is denied for this document."),
+			want: true,
+		},
+		{
+			name: "securityerror lowercase",
+			err:  errors.New("securityerror: access denied"),
+			want: true,
+		},
+		{
+			name: "generic eval error",
+			err:  errors.New("eval js error: execution context destroyed"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isNonFatalCanaryEvalError(tt.err)
+			if got != tt.want {
+				t.Fatalf("isNonFatalCanaryEvalError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }

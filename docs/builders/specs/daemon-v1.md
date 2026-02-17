@@ -19,7 +19,7 @@ Last updated: 2026-02-15
 
 ## 1) Decision snapshot (agreed)
 
-1. Daemon mode is **initially gated behind `--daemon`**.
+1. Daemon mode is enabled by default via config (`daemon.enabled: true`); `--daemon=false` disables forwarding for a single command.
 2. Notifications use a built-in **OpenClaw CLI invocation path** (expects OpenClaw available on same host).
 3. Defaults:
    - `max_queue_size = 64`
@@ -59,17 +59,19 @@ Last updated: 2026-02-15
 
 ### 4.1 Activation
 
-- New global flag: `--daemon`.
-- Without `--daemon`, existing behavior remains unchanged.
-- With `--daemon`, the CLI becomes a client:
+- Global flag: `--daemon` (bool override).
+- Default behavior uses config `daemon.enabled` (default `true`).
+- If `daemon.enabled` is true and `--daemon` is not explicitly set, the CLI becomes a client:
   1. Try connect to daemon socket.
   2. If absent, auto-start daemon.
   3. Submit command request.
   4. Wait for response (bounded by timeout).
+- `--daemon=false` forces direct non-daemon execution for that invocation.
 
 ### 4.2 Daemon subcommands
 
 Add:
+- `cli-365 daemon start` (launch daemon in background, wait for readiness, then run warmup chain: `browser start` -> `auth login`)
 - `cli-365 daemon run` (internal long-running server)
 - `cli-365 daemon status`
 - `cli-365 daemon stop`
@@ -91,7 +93,7 @@ If daemon is running and caller passes `--cdp-port` differing from daemon’s ac
 ## 5) High-level architecture
 
 ```text
-cli-365 --daemon <command>
+cli-365 <command>   # default path when daemon.enabled=true
    │
    ├─(UDS JSON RPC request)──► cli-365 daemon
    │                           ├─ Queue manager (FIFO, bounded)
@@ -168,8 +170,13 @@ On entering `AUTH_RECOVERING`:
 1. Pause queue consumption.
 2. Reject new requests (`AUTH_PAUSED`).
 3. Launch secure input command (`secure-targeted-input` from `PATH`).
-4. Notify operator via OpenClaw with current login URL.
-5. Poll for session valid until timeout (`auth_recovery_timeout`, default 5m).
+4. After each submit, probe auth stage and branch:
+   - password retry/error -> re-prompt secure input (bounded retries)
+   - OTP input -> re-prompt secure input with OTP selectors
+   - authenticator number challenge -> notify operator with shown number
+   - push approval/manual MFA -> notify operator with required action
+5. Notify operator via OpenClaw with login URL and secure-input links.
+6. Poll for session valid until timeout (`auth_recovery_timeout`, default 5m).
 
 Outcomes:
 - Success: resume queue.
@@ -349,7 +356,7 @@ auth:
   secure_input: "secure-targeted-input" # resolved from PATH by daemon auth recovery
 
 daemon:
-  enabled: false                 # gated behind --daemon initially
+  enabled: true                  # default: route commands via daemon unless overridden by --daemon=false
   socket_path: ""               # default: $XDG_STATE_HOME/cli-365/daemon.sock
   lock_path: ""                 # default: $XDG_STATE_HOME/cli-365/daemon.lock
   max_queue_size: 64

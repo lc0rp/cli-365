@@ -2,8 +2,11 @@ package browser
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -355,6 +358,54 @@ func TestStopWithUnmanagedBrowser(t *testing.T) {
 	}
 	if err.Error() != "no managed browser to stop" {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestWSEndpointReachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/test",
+		})
+	}))
+	defer server.Close()
+
+	wsEndpoint := strings.Replace(server.URL, "http://", "ws://", 1) + "/devtools/browser/test"
+	reachable, err := WSEndpointReachable(wsEndpoint, time.Second)
+	if err != nil {
+		t.Fatalf("WSEndpointReachable() error: %v", err)
+	}
+	if !reachable {
+		t.Fatal("WSEndpointReachable() = false, want true")
+	}
+}
+
+func TestWSEndpointReachableInvalidPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{})
+	}))
+	defer server.Close()
+
+	wsEndpoint := strings.Replace(server.URL, "http://", "ws://", 1) + "/devtools/browser/test"
+	reachable, err := WSEndpointReachable(wsEndpoint, time.Second)
+	if err == nil {
+		t.Fatal("WSEndpointReachable() error = nil, want error")
+	}
+	if reachable {
+		t.Fatal("WSEndpointReachable() = true, want false")
+	}
+}
+
+func TestPIDAliveCurrentProcess(t *testing.T) {
+	if !PIDAlive(os.Getpid()) {
+		t.Fatal("PIDAlive(current) = false, want true")
 	}
 }
 

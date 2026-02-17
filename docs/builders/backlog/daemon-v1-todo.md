@@ -2,7 +2,7 @@
 type: How-to
 primary_audience: Builders
 owner: cli-365 maintainers
-last_verified: 2026-02-15
+last_verified: 2026-02-16
 next_review_by: 2026-02-22
 source_of_truth: ../specs/daemon-v1.md
 read_when: Selecting next daemon implementation task.
@@ -24,7 +24,7 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 ### Phase A: daemon skeleton + IPC
 
 - [x] Add global `--daemon` flag.
-- [x] Add `daemon run|status|stop` commands.
+- [x] Add `daemon start|run|status|stop` commands.
 - [x] Add optional `daemon ping` command for health checks.
 - [x] Add UDS socket + lock + status file lifecycle.
 - [x] Enforce single instance via lock file.
@@ -57,10 +57,18 @@ Source of truth: `docs/builders/specs/daemon-v1.md`
 - [x] Pause queue on auth-required signal.
 - [x] Reject new requests while paused (`AUTH_PAUSED`).
 - [x] Invoke secure input (`secure-targeted-input` binary from `PATH`) + OpenClaw notification.
+- [x] Forward secure-input one-time URL (printed by `secure-targeted-input`) via OpenClaw notification (`reason=secure_input_url`) with expiry metadata (`secure_input_expires_at`, `secure_input_expires_in`) and auto-inject browser-targeting args (`--cdp-port`/runtime file, `--target-tab-id` when available) for secure-input invocation.
+- [x] Harden secure-input retries for browser drift: reconnect on submit using current runtime endpoint and fallback when `target-tab-id` is stale.
+- [x] Keep auth recovery open until live session probe passes (avoid cached-token false positives that close secure-input listeners early).
+- [x] Retry secure-input process launch on transient selector/page lookup failures during auth recovery (avoid immediate `AUTH_TIMEOUT` on first launch failure).
+- [x] Trigger browser recovery attempts while auth recovery is active when live session probe reports browser/session unavailable.
+- [x] Fail closed when daemon browser/session recovery preflight cannot restore CDP/session readiness (no per-command fallback execution).
+- [x] Remove CLI-facing `--ensure-cdp` flags; keep CDP/auth readiness as intrinsic daemon preflight behavior.
 - [x] Timeout pending requests at `auth_recovery_timeout = 5m` (`AUTH_TIMEOUT`).
 - [x] Model explicit state machine transitions (`READY -> AUTH_RECOVERING -> READY|AUTH_FAILED`).
 - [x] Fail all queued pending requests on auth timeout (fan-out).
 - [x] Include login URL + queue depth in auth-required/auth-timeout notifications.
+- [x] Treat login-prompt/canary-loss failures from `mail|calendar` as auth-required and trigger secure-input recovery when session probe remains unavailable after browser-start recovery.
 
 ### Phase E: coalescing + flood controls
 

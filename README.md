@@ -24,6 +24,13 @@ cd cli-365
 go build -o cli-365 ./cmd/cli-365
 ```
 
+Recommended local build target (devbox/mac): install into `~/.local/bin` so daemon and shell
+can resolve the binary from `PATH`.
+
+```bash
+go build -o ~/.local/bin/cli-365 ./cmd/cli-365
+```
+
 ## Configuration
 
 Configuration file: `~/.config/cli-365/config.yaml`
@@ -43,6 +50,8 @@ auth:
 security:
   allowlist: ["mail", "calendar", "auth", "browser"]  # Commands allowed (empty = all)
   keyring: "os"      # Token storage: os | encrypted-file | plain
+daemon:
+  enabled: true      # Default: route commands via daemon unless --daemon=false is set
 ```
 
 ## Quickstart
@@ -50,14 +59,14 @@ security:
 Note: on devbox, prepend `DISPLAY=:1 XAUTHORITY=$HOME/.Xauthority` to commands to enable GUI.
 
 ```bash
-# Start or connect to a managed browser and wait for login 
-cli-365 --ensure-cdp --cdp-port 9222 auth login
+# Start/login once (opens browser for authentication)
+cli-365 --cdp-port 9222 auth login
 
 # Search your inbox
-cli-365 --ensure-cdp --cdp-port 9222 mail search "invoice" --limit 5
+cli-365 --cdp-port 9222 mail search "invoice" --limit 5
 
 # View a message from the last search (index is 1-based)
-cli-365 --ensure-cdp --cdp-port 9222 mail view --index 1
+cli-365 --cdp-port 9222 mail view --index 1
 ```
 
 ### Security Features
@@ -95,13 +104,11 @@ These flags must appear **before** the subcommand:
 
 ```bash
 cli-365 --json auth status
-cli-365 --ensure-cdp --cdp-port 9222 mail search "invoice"
+cli-365 --cdp-port 9222 mail search "invoice"
 ```
 
 Available:
 - `--json`: JSON output for any command
-- `--ensure-cdp`: start managed browser if CDP is unavailable and wait for login
-- `--ensure-cdp-timeout`: max wait (default 5m)
 - `--cdp-port`: override configured CDP port for this run
 - `--readonly`: block write commands (send/draft/delete)
 
@@ -268,15 +275,17 @@ Notes:
 Override the configured CDP port for a single run:
 
 ```bash
-cli-365 --cdp-port 9222 --ensure-cdp mail search "invoice"
+cli-365 --cdp-port 9222 mail search "invoice"
 ```
 
-### Ensure CDP
+### Daemon CDP/Auth Preflight
 
-If your config points at a CDP endpoint that might be stale, use `--ensure-cdp` to start a managed browser and wait for login.
+By default (`daemon.enabled: true`), `mail`/`calendar` commands run through daemon preflight that ensures CDP/browser availability and performs auth recovery before command execution.
 
 ```bash
-cli-365 --ensure-cdp --ensure-cdp-timeout 5m mail search "invoice"
+cli-365 calendar list --limit 10
+# Disable daemon path for one run
+cli-365 --daemon=false calendar list --limit 10
 ```
 
 ### Debug / Discovery
@@ -299,9 +308,9 @@ cli-365 debug capture --all-targets --netlog ./owa-capture.json
 ## Troubleshooting
 
 - **Browser window not showing**: ensure a GUI is available and export `DISPLAY`/`XAUTHORITY` (e.g. `DISPLAY=:1 XAUTHORITY=$HOME/.Xauthority`).
-- **401 Unauthorized**: run `cli-365 auth login` or `cli-365 --ensure-cdp auth login` to refresh tokens.
+- **401 Unauthorized**: run `cli-365 auth login` to refresh tokens.
 - **500 OwaSerializationException**: capture a netlog (`cli-365 debug capture --netlog ...`) and re-run after login.
-- **Stale CDP**: use `--ensure-cdp` and/or set `--cdp-port` to a known port.
+- **Stale CDP**: use daemon mode (`--daemon`) and/or set `--cdp-port` to a known port.
 
 ## Known Issues
 

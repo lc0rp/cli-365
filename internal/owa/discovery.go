@@ -20,10 +20,10 @@ func DiscoverTokens(page *rod.Page) (*Tokens, error) {
 
 	// First try to get canary from cookies
 	canary, err := getCanaryFromCookies(page)
-	if err != nil || canary == "" {
+	if canary == "" {
 		// Fallback to in-page extraction
 		canary, err = getCanaryFromPage(page)
-		if err != nil {
+		if err != nil && !isNonFatalCanaryEvalError(err) {
 			return nil, fmt.Errorf("failed to extract canary: %w", err)
 		}
 	}
@@ -329,6 +329,17 @@ func getCanaryFromPage(page *rod.Page) (string, error) {
 	}
 
 	return result.Value.Str(), nil
+}
+
+func isNonFatalCanaryEvalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "securityerror") {
+		return true
+	}
+	return strings.Contains(msg, "failed to read the 'cookie' property from 'document'")
 }
 
 type bearerTokens struct {

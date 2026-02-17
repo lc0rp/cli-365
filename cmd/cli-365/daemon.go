@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -21,6 +22,24 @@ func daemonCommand() *cli.Command {
 		Name:  "daemon",
 		Usage: "Manage cli-365 daemon process",
 		Subcommands: []*cli.Command{
+			{
+				Name:  "start",
+				Usage: "Start daemon server in background, warm browser/auth, and wait for readiness",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "log-file",
+						Usage: "Path to daemon stdout/stderr log file",
+					},
+					&cli.DurationFlag{
+						Name:  "wait",
+						Value: 5 * time.Second,
+						Usage: "Maximum time to wait for daemon readiness",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					return runDaemonStart(c)
+				},
+			},
 			{
 				Name:  "run",
 				Usage: "Run daemon server in foreground",
@@ -38,7 +57,7 @@ func daemonCommand() *cli.Command {
 					}
 					applyDaemonRuntimeEnv(cfg.Daemon.Display)
 					opts := daemon.ResolveOptions(cfg)
-					server := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
+					server := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes, c.String("config")))
 					server.SetLogWriter(os.Stderr)
 
 					ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -129,8 +148,23 @@ func daemonCommand() *cli.Command {
 
 func applyDaemonRuntimeEnv(display string) {
 	display = strings.TrimSpace(display)
+	if display == "" && runtime.GOOS == "linux" {
+		display = ":1"
+	}
 	if display == "" {
 		return
 	}
 	_ = os.Setenv("DISPLAY", display)
+	if strings.TrimSpace(os.Getenv("XAUTHORITY")) != "" {
+		return
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	authPath := filepath.Join(homeDir, ".Xauthority")
+	if _, err := os.Stat(authPath); err != nil {
+		return
+	}
+	_ = os.Setenv("XAUTHORITY", authPath)
 }

@@ -28,6 +28,9 @@ func TestDefault(t *testing.T) {
 	if cfg.Daemon.MaxQueueSize != 64 {
 		t.Errorf("Daemon.MaxQueueSize = %d, want 64", cfg.Daemon.MaxQueueSize)
 	}
+	if !cfg.Daemon.Enabled {
+		t.Error("Daemon.Enabled should be true by default")
+	}
 	if cfg.Daemon.MaxRequestBytes != 1024*1024 {
 		t.Errorf("Daemon.MaxRequestBytes = %d, want 1048576", cfg.Daemon.MaxRequestBytes)
 	}

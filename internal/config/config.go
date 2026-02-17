@@ -86,7 +86,7 @@ func Default() Config {
 			Keyring:   "os",
 		},
 		Daemon: DaemonConfig{
-			Enabled:                          false,
+			Enabled:                          true,
 			SocketPath:                       "",
 			LockPath:                         "",
 			StatusPath:                       "",

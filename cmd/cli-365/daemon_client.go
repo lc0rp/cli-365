@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -35,11 +36,7 @@ func runViaDaemon(c *cli.Context) error {
 		return cli.Exit("no command to execute", 1)
 	}
 
-	timeout := opts.DefaultCommandTimeout
-	if timeout <= 0 {
-		timeout = 2 * time.Minute
-	}
-	callTimeout := timeout + (5 * time.Second)
+	timeout, callTimeout := computeDaemonTimeouts(opts)
 	requestCDPPort := 0
 	if c.IsSet("cdp-port") {
 		requestCDPPort = c.Int("cdp-port")
@@ -70,6 +67,21 @@ func runViaDaemon(c *cli.Context) error {
 	return cli.Exit("", 0)
 }
 
+func computeDaemonTimeouts(opts daemon.Options) (time.Duration, time.Duration) {
+	requestTimeout := opts.DefaultCommandTimeout
+	if requestTimeout <= 0 {
+		requestTimeout = 2 * time.Minute
+	}
+	if opts.AuthRecoveryTimeout > 0 {
+		minRequestTimeout := opts.AuthRecoveryTimeout + (30 * time.Second)
+		if requestTimeout < minRequestTimeout {
+			requestTimeout = minRequestTimeout
+		}
+	}
+	callTimeout := requestTimeout + (15 * time.Second)
+	return requestTimeout, callTimeout
+}
+
 func ensureDaemonAvailable(c *cli.Context, opts daemon.Options) error {
 	if err := daemon.Ping(opts.SocketPath, 300*time.Millisecond); err == nil {
 		return nil
@@ -91,6 +103,7 @@ func ensureDaemonAvailable(c *cli.Context, opts daemon.Options) error {
 
 	cmd := exec.Command(exePath, args...)
 	cmd.Env = os.Environ()
+	detachDaemonProcess(cmd)
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		return err
@@ -114,6 +127,16 @@ func ensureDaemonAvailable(c *cli.Context, opts daemon.Options) error {
 	}
 
 	return fmt.Errorf("daemon did not start within timeout")
+}
+
+func detachDaemonProcess(cmd *exec.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch runtime.GOOS {
+	case "linux", "darwin":
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	}
 }
 
 func stripDaemonFlag(args []string) []string {

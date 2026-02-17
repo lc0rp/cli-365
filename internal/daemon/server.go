@@ -98,7 +98,6 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 		recipientWriteSeen: make(map[string][]time.Time),
 		authState:          AuthStateReady,
 	}
-	srv.authProbe = defaultAuthProbe(execFn)
 	srv.secureInputRunner = defaultSecureInputRunner
 	srv.notifyAuth = defaultNotifyAuth(opts.NotifyProvider, opts.NotifyOpenClawCmd, opts.NotifyChannel, opts.NotifyTarget)
 	srv.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -108,6 +107,7 @@ func NewServer(opts Options, execFn ExecFunc) *Server {
 	srv.tokenSaver = defaultTokenSaver
 	srv.tokenRefresher = srv.defaultTokenRefresher
 	srv.sessionProbe = srv.defaultSessionProbe
+	srv.authProbe = srv.defaultAuthRecoveryProbe
 	srv.tokenRefreshLead = defaultTokenRefreshLead
 	srv.lookupPath = defaultLookupPath
 	srv.maintenanceInterval = defaultSessionMaintenanceInterval
@@ -211,7 +211,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			if runCtx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				<-workerDone

@@ -27,6 +27,50 @@ func TestParseJWTExpiry(t *testing.T) {
 	}
 }
 
+func TestShouldManageSession(t *testing.T) {
+	tests := []struct {
+		name        string
+		commandPath string
+		argv        []string
+		want        bool
+	}{
+		{
+			name:        "mail search",
+			commandPath: "mail search",
+			argv:        []string{"mail", "search"},
+			want:        true,
+		},
+		{
+			name:        "calendar list",
+			commandPath: "calendar list",
+			argv:        []string{"calendar", "list"},
+			want:        true,
+		},
+		{
+			name:        "auth login",
+			commandPath: "auth login",
+			argv:        []string{"auth", "login"},
+			want:        true,
+		},
+		{
+			name:        "auth status",
+			commandPath: "auth status",
+			argv:        []string{"auth", "status"},
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldManageSession(tt.commandPath, tt.argv)
+			if got != tt.want {
+				t.Fatalf("shouldManageSession(%q, %v) = %v, want %v", tt.commandPath, tt.argv, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRefreshTokensIfNeededTriggersRefresherNearExpiry(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	nearExpiry := now.Add(2 * time.Minute)
@@ -140,7 +184,7 @@ func TestExecuteTaskSessionProbeTriggersAuthRecovery(t *testing.T) {
 	srv.sessionProbe = func(_ context.Context) (bool, error) { return false, nil }
 
 	srv.authProbe = func(_ context.Context) (bool, error) { return true, nil }
-	srv.secureInputRunner = func(_ context.Context, _ string) error { return nil }
+	srv.secureInputRunner = func(_ context.Context, _ string, _ func(string)) error { return nil }
 	notifyCalls := int32(0)
 	srv.notifyAuth = func(_ context.Context, _ AuthNotification) error {
 		atomic.AddInt32(&notifyCalls, 1)
@@ -217,7 +261,7 @@ func TestExecuteTaskSessionProbeUnavailableAttemptsBrowserRecovery(t *testing.T)
 
 	notifyCalls := int32(0)
 	srv.authProbe = func(_ context.Context) (bool, error) { return true, nil }
-	srv.secureInputRunner = func(_ context.Context, _ string) error {
+	srv.secureInputRunner = func(_ context.Context, _ string, _ func(string)) error {
 		t.Fatal("secureInputRunner should not be called when browser recovery succeeds")
 		return nil
 	}
@@ -257,6 +301,177 @@ func TestExecuteTaskSessionProbeUnavailableAttemptsBrowserRecovery(t *testing.T)
 	}
 	if len(execArgs[1]) < 2 || execArgs[1][0] != "mail" || execArgs[1][1] != "search" {
 		t.Fatalf("second exec argv = %v, want [mail search ...]", execArgs[1])
+	}
+}
+
+func TestExecuteTaskSessionProbeStillUnavailableTriggersAuthRecovery(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	runtimeDir := filepath.Dir(paths.RuntimePath())
+
+	opts := testOptions(t)
+	opts.StateDir = runtimeDir
+	opts.AuthProbeInterval = 5 * time.Millisecond
+	opts.AuthRecoveryTimeout = 250 * time.Millisecond
+
+	var (
+		mu       sync.Mutex
+		execArgs [][]string
+	)
+	srv := NewServer(opts, func(_ context.Context, argv []string, _ time.Duration) ExecResult {
+		copied := append([]string{}, argv...)
+		mu.Lock()
+		execArgs = append(execArgs, copied)
+		mu.Unlock()
+
+		if len(argv) >= 2 && argv[0] == "browser" && argv[1] == "start" {
+			return ExecResult{ExitCode: 0, Stdout: "browser started\n"}
+		}
+		return ExecResult{ExitCode: 0, Stdout: "ok\n"}
+	})
+
+	srv.tokenLoader = func() (*owa.Tokens, error) {
+		return &owa.Tokens{
+			Canary: "cached-canary",
+			Bearer: bearerWithExp(t, time.Now().Add(time.Hour)),
+		}, nil
+	}
+	srv.tokenSaver = func(_ *owa.Tokens) error { return nil }
+	srv.tokenRefresher = func(_ context.Context) (*owa.Tokens, error) {
+		t.Fatal("tokenRefresher should not be called for healthy token")
+		return nil, nil
+	}
+	srv.sessionProbe = func(_ context.Context) (bool, error) {
+		return false, errSessionProbeUnavailable
+	}
+
+	var (
+		secureCalls int32
+		authProbes  int32
+	)
+	srv.authProbe = func(_ context.Context) (bool, error) {
+		return atomic.AddInt32(&authProbes, 1) >= 2, nil
+	}
+	srv.secureInputRunner = func(_ context.Context, _ string, _ func(string)) error {
+		atomic.AddInt32(&secureCalls, 1)
+		return nil
+	}
+	var notifyCalls int32
+	srv.notifyAuth = func(_ context.Context, _ AuthNotification) error {
+		atomic.AddInt32(&notifyCalls, 1)
+		return nil
+	}
+
+	resp := srv.executeTask(context.Background(), queuedExec{
+		req: Request{
+			RequestID:   "session-probe-unavailable-auth-recovery",
+			CommandPath: "calendar list",
+		},
+		argv:       []string{"calendar", "list"},
+		timeout:    time.Second,
+		enqueuedAt: time.Now().UTC(),
+		respCh:     make(chan Response, 1),
+	})
+
+	if !resp.OK {
+		t.Fatalf("response not ok: code=%q stderr=%q", resp.ErrorCode, resp.Stderr)
+	}
+	if got := atomic.LoadInt32(&secureCalls); got != 1 {
+		t.Fatalf("secureInputRunner calls = %d, want 1", got)
+	}
+	if got := atomic.LoadInt32(&notifyCalls); got != 1 {
+		t.Fatalf("notifyAuth calls = %d, want 1", got)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(execArgs) != 2 {
+		t.Fatalf("exec calls = %d, want 2", len(execArgs))
+	}
+	if len(execArgs[0]) < 2 || execArgs[0][0] != "browser" || execArgs[0][1] != "start" {
+		t.Fatalf("first exec argv = %v, want [browser start ...]", execArgs[0])
+	}
+	if len(execArgs[1]) < 2 || execArgs[1][0] != "calendar" || execArgs[1][1] != "list" {
+		t.Fatalf("second exec argv = %v, want [calendar list ...]", execArgs[1])
+	}
+}
+
+func TestExecuteTaskSessionProbeUnavailableBrowserRecoveryFailureFailsFast(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	runtimeDir := filepath.Dir(paths.RuntimePath())
+
+	opts := testOptions(t)
+	opts.StateDir = runtimeDir
+	opts.AuthProbeInterval = 5 * time.Millisecond
+	opts.AuthRecoveryTimeout = 250 * time.Millisecond
+
+	var (
+		mu       sync.Mutex
+		execArgs [][]string
+	)
+	srv := NewServer(opts, func(_ context.Context, argv []string, _ time.Duration) ExecResult {
+		copied := append([]string{}, argv...)
+		mu.Lock()
+		execArgs = append(execArgs, copied)
+		mu.Unlock()
+
+		if len(argv) >= 2 && argv[0] == "browser" && argv[1] == "start" {
+			return ExecResult{ExitCode: 1, Stderr: "failed to start browser"}
+		}
+		return ExecResult{ExitCode: 0, Stdout: "ok\n"}
+	})
+
+	srv.tokenLoader = func() (*owa.Tokens, error) {
+		return &owa.Tokens{
+			Canary: "cached-canary",
+			Bearer: bearerWithExp(t, time.Now().Add(time.Hour)),
+		}, nil
+	}
+	srv.tokenSaver = func(_ *owa.Tokens) error { return nil }
+	srv.tokenRefresher = func(_ context.Context) (*owa.Tokens, error) {
+		t.Fatal("tokenRefresher should not be called for healthy token")
+		return nil, nil
+	}
+	srv.sessionProbe = func(_ context.Context) (bool, error) {
+		return false, errSessionProbeUnavailable
+	}
+
+	srv.authProbe = func(_ context.Context) (bool, error) {
+		t.Fatal("authProbe should not be called when browser recovery fails early")
+		return false, nil
+	}
+	srv.secureInputRunner = func(_ context.Context, _ string, _ func(string)) error {
+		t.Fatal("secureInputRunner should not be called when browser recovery fails early")
+		return nil
+	}
+	srv.notifyAuth = func(_ context.Context, _ AuthNotification) error { return nil }
+
+	resp := srv.executeTask(context.Background(), queuedExec{
+		req: Request{
+			RequestID:   "session-probe-unavailable-browser-recovery-failure",
+			CommandPath: "mail search",
+		},
+		argv:       []string{"mail", "search", "inbox"},
+		timeout:    time.Second,
+		enqueuedAt: time.Now().UTC(),
+		respCh:     make(chan Response, 1),
+	})
+
+	if resp.OK {
+		t.Fatal("response ok, want auth timeout failure")
+	}
+	if resp.ErrorCode != ErrorCodeAuthTimeout {
+		t.Fatalf("response error_code = %q, want %q", resp.ErrorCode, ErrorCodeAuthTimeout)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(execArgs) != 1 {
+		t.Fatalf("exec calls = %d, want 1", len(execArgs))
+	}
+	if len(execArgs[0]) < 2 || execArgs[0][0] != "browser" || execArgs[0][1] != "start" {
+		t.Fatalf("first exec argv = %v, want [browser start ...]", execArgs[0])
 	}
 }
 

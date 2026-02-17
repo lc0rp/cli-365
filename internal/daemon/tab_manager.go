@@ -59,6 +59,8 @@ func normalizedCommandPath(commandPath string, argv []string) string {
 func planPrimaryTab(existingPrimary string, pages []tabSnapshot) tabPlan {
 	isOWA := make(map[string]bool, len(pages))
 	orderedOWA := make([]string, 0, len(pages))
+	isAuth := make(map[string]bool, len(pages))
+	orderedAuth := make([]string, 0, len(pages))
 	blankIDs := make([]string, 0, len(pages))
 	for _, p := range pages {
 		id := strings.TrimSpace(p.ID)
@@ -70,24 +72,36 @@ func planPrimaryTab(existingPrimary string, pages []tabSnapshot) tabPlan {
 			orderedOWA = append(orderedOWA, id)
 			continue
 		}
+		if isAuthURLForDaemon(p.URL) {
+			isAuth[id] = true
+			orderedAuth = append(orderedAuth, id)
+			continue
+		}
 		if isAboutBlankURL(p.URL) {
 			blankIDs = append(blankIDs, id)
 		}
 	}
 
 	primary := ""
-	if existingPrimary != "" && isOWA[existingPrimary] {
+	if existingPrimary != "" && (isOWA[existingPrimary] || isAuth[existingPrimary]) {
 		primary = existingPrimary
 	} else if len(orderedOWA) > 0 {
 		primary = orderedOWA[0]
+	} else if len(orderedAuth) > 0 {
+		primary = orderedAuth[0]
 	}
 
 	if primary == "" {
 		return tabPlan{}
 	}
 
-	closeSet := make(map[string]struct{}, len(blankIDs)+len(orderedOWA))
+	closeSet := make(map[string]struct{}, len(blankIDs)+len(orderedOWA)+len(orderedAuth))
 	for _, id := range orderedOWA {
+		if id != primary {
+			closeSet[id] = struct{}{}
+		}
+	}
+	for _, id := range orderedAuth {
 		if id != primary {
 			closeSet[id] = struct{}{}
 		}
@@ -227,7 +241,7 @@ func (s *Server) maintainPrimaryOWATab() {
 	}
 
 	if primaryPage != nil {
-		if !isOWAURLForDaemon(urlByID[primaryID]) {
+		if !isOWAURLForDaemon(urlByID[primaryID]) && !isAuthURLForDaemon(urlByID[primaryID]) {
 			_ = owa.NavigateToOWA(primaryPage)
 		}
 		if info, err := primaryPage.Info(); err == nil && info != nil {
@@ -255,4 +269,14 @@ func isOWAURLForDaemon(raw string) bool {
 	return strings.Contains(url, "/mail") ||
 		strings.Contains(url, "/owa/") ||
 		strings.Contains(url, "/calendar")
+}
+
+func isAuthURLForDaemon(raw string) bool {
+	url := strings.ToLower(strings.TrimSpace(raw))
+	if url == "" {
+		return false
+	}
+	return strings.Contains(url, "login.microsoftonline.com") ||
+		strings.Contains(url, "login.live.com") ||
+		strings.Contains(url, "account.live.com")
 }

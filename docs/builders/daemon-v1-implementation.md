@@ -2,7 +2,7 @@
 type: How-to
 primary_audience: Builders
 owner: cli-365 maintainers
-last_verified: 2026-02-15
+last_verified: 2026-02-16
 next_review_by: 2026-03-01
 source_of_truth: ./specs/daemon-v1.md
 read_when: Starting daemon mode implementation work.
@@ -15,14 +15,15 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 
 ## Scope
 
-- Implement daemon path behind global flag: `--daemon`.
+- Implement daemon path with config default-on (`daemon.enabled: true`) and per-run override flag `--daemon`.
 - Keep non-daemon behavior unchanged.
 - Linux/macOS only for v1.
 
 ## Expected user-facing contract (v1)
 
-- `cli-365 --daemon <existing-command>` routes through daemon.
-- `cli-365 daemon run|status|stop` available (`ping` optional).
+- `cli-365 <existing-command>` routes through daemon by default.
+- `cli-365 --daemon=false <existing-command>` bypasses daemon for that run.
+- `cli-365 daemon start|run|status|stop` available (`ping` optional); `daemon start` runs warmup chain `browser start` -> `auth login` before returning (best effort, warning on host prerequisite failures).
 - Queue/full/auth/cdp mismatch return stable error codes.
 
 ## Suggested file layout
@@ -42,7 +43,7 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 ### Phase A: Skeleton + IPC
 
 - [x] Add global `--daemon` flag.
-- [x] Add `daemon run|status|stop` commands.
+- [x] Add `daemon start|run|status|stop` commands.
 - [x] Add UDS socket + lock + pid/status paths under XDG state.
 - [x] Enforce file/socket permissions (`0700` dir, `0600` files).
 - [x] Add tests for single-instance lock behavior.
@@ -74,10 +75,20 @@ Status: in progress (Phase A complete, Phase B queue/transport + in-process disp
 - [x] Pause queue consumption on auth required.
 - [x] Reject new work while paused (`AUTH_PAUSED`).
 - [x] Trigger secure-input command + OpenClaw CLI notification.
+- [x] Parse secure-input one-time URL from `secure-targeted-input` stdout and send via OpenClaw (`reason=secure_input_url`), including `secure_input_expires_at` and `secure_input_expires_in` metadata; auto-inject secure-input defaults for auth selectors plus browser targeting (`--cdp-port`/runtime file/`--target-tab-id` when available).
+- [x] Add stage-aware auth recovery loop after secure-input submissions: detect password retry, OTP input, authenticator number challenge, push-approval prompts; re-prompt secure input for password/OTP (bounded retries), and emit direct OpenClaw notifications for MFA number/push stages.
+- [x] Emit auth progress stage updates (`auth_stage_update`, secure-input prompt/url events) so daemon-start can print live auth progress instead of appearing idle.
+- [x] Harden secure-input drift paths: include runtime-file handoff in daemon command prep and support stale target-id fallback + reconnect-on-submit behavior in `secure-targeted-input` so retries survive browser endpoint churn.
+- [x] Use live session probe for auth-recovery completion (instead of cached token/auth-status) so secure-input URL listeners are not torn down early.
+- [x] Retry secure-input process launch inside auth recovery when selector/page state is transiently unavailable, and log structured `auth_secure_input_error` attempts instead of failing immediately.
+- [x] During auth recovery, treat `session probe unavailable` as a browser-recovery signal and re-run managed browser recovery/primary-tab maintenance before timing out.
 - [x] Timeout fan-out failure (`AUTH_TIMEOUT`) after 5m default.
 - [x] Add daemon IPC integration tests for paused/timeout auth recovery responses.
 - [x] Validate default OpenClaw CLI notifier invocation contract with command-arg tests.
 - [x] Preflight notifier command availability at daemon startup and log `notifier_unavailable` when OpenClaw CLI is missing.
+- [x] Detect login-prompt/canary-loss auth failures from `mail|calendar` execution and trigger secure-input recovery when preflight session probe remains unavailable after browser recovery.
+- [x] Make daemon session/CDP preflight fail closed for `mail|calendar` (if browser-start/session-probe recovery fails, do not run per-command handlers).
+- [x] Remove CLI `--ensure-cdp`/`--ensure-cdp-timeout` user flags; daemon preflight owns CDP/auth readiness in daemon mode.
 
 ### Phase E: Coalescing + flood controls
 

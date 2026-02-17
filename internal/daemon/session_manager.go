@@ -47,6 +47,10 @@ func shouldManageSession(commandPath string, argv []string) bool {
 		return true
 	case strings.HasPrefix(path, "calendar "):
 		return true
+	case path == "auth login":
+		return true
+	case strings.HasPrefix(path, "auth login "):
+		return true
 	default:
 		return false
 	}
@@ -85,7 +89,7 @@ func (s *Server) ensureSessionReady(parent context.Context, deadline time.Time, 
 	if err != nil {
 		if errors.Is(err, errSessionProbeUnavailable) {
 			if !s.tryRecoverBrowserForSession(parent, deadline) {
-				return true
+				return false
 			}
 
 			remaining = time.Until(deadline)
@@ -98,14 +102,15 @@ func (s *Server) ensureSessionReady(parent context.Context, deadline time.Time, 
 			retryCancel()
 			if retryErr != nil {
 				if errors.Is(retryErr, errSessionProbeUnavailable) {
-					return true
+					return s.runAuthRecovery(parent)
 				}
-				if !errors.Is(retryErr, context.Canceled) && !errors.Is(retryErr, context.DeadlineExceeded) {
-					s.logEvent("warn", "session_probe_error", map[string]interface{}{
-						"error": retryErr.Error(),
-					})
+				if errors.Is(retryErr, context.Canceled) || errors.Is(retryErr, context.DeadlineExceeded) {
+					return false
 				}
-				return true
+				s.logEvent("warn", "session_probe_error", map[string]interface{}{
+					"error": retryErr.Error(),
+				})
+				return s.runAuthRecovery(parent)
 			}
 			if retryValid {
 				return true
@@ -113,12 +118,12 @@ func (s *Server) ensureSessionReady(parent context.Context, deadline time.Time, 
 			return s.runAuthRecovery(parent)
 		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return true
+			return false
 		}
 		s.logEvent("warn", "session_probe_error", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return true
+		return s.runAuthRecovery(parent)
 	}
 	if valid {
 		return true
@@ -292,7 +297,8 @@ func (s *Server) currentPrimaryOWAPage() (*rod.Page, error) {
 	}
 
 	primaryID := s.getPrimaryTabID()
-	var fallback *rod.Page
+	var fallbackOWA *rod.Page
+	var fallbackAuth *rod.Page
 	for _, page := range pages {
 		info, err := page.Info()
 		if err != nil || info == nil {
@@ -302,11 +308,17 @@ func (s *Server) currentPrimaryOWAPage() (*rod.Page, error) {
 		if primaryID != "" && id == primaryID {
 			return page, nil
 		}
-		if fallback == nil && isOWAURLForDaemon(info.URL) {
-			fallback = page
+		if fallbackOWA == nil && isOWAURLForDaemon(info.URL) {
+			fallbackOWA = page
+		}
+		if fallbackAuth == nil && isAuthURLForDaemon(info.URL) {
+			fallbackAuth = page
 		}
 	}
-	return fallback, nil
+	if fallbackOWA != nil {
+		return fallbackOWA, nil
+	}
+	return fallbackAuth, nil
 }
 
 func tokenExpiry(tokens *owa.Tokens) (time.Time, bool) {

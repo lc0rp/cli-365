@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,13 +14,14 @@ import (
 
 var stdioCaptureMu sync.Mutex
 
-func daemonExecFunc(maxResponseBytes int) daemon.ExecFunc {
+func daemonExecFunc(maxResponseBytes int, daemonConfigPath string) daemon.ExecFunc {
+	daemonConfigPath = strings.TrimSpace(daemonConfigPath)
 	return func(ctx context.Context, argv []string, timeout time.Duration) daemon.ExecResult {
-		return runCLIInProcess(ctx, argv, timeout, maxResponseBytes)
+		return runCLIInProcess(ctx, argv, timeout, maxResponseBytes, daemonConfigPath)
 	}
 }
 
-func runCLIInProcess(parent context.Context, argv []string, timeout time.Duration, maxCaptureBytes int) daemon.ExecResult {
+func runCLIInProcess(parent context.Context, argv []string, timeout time.Duration, maxCaptureBytes int, daemonConfigPath string) daemon.ExecResult {
 	if len(argv) == 0 {
 		return daemon.ExecResult{
 			ExitCode: 1,
@@ -30,7 +32,12 @@ func runCLIInProcess(parent context.Context, argv []string, timeout time.Duratio
 	runCtx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	args := append([]string{"cli-365"}, append([]string{}, argv...)...)
+	commandArgv := append([]string{}, argv...)
+	if daemonConfigPath != "" && !hasConfigArg(commandArgv) {
+		commandArgv = append([]string{"--config", daemonConfigPath}, commandArgv...)
+	}
+
+	args := append([]string{"cli-365"}, commandArgv...)
 	exitCode := 0
 
 	stdout, stderr, captureErr := captureProcessStdio(func() {
@@ -58,6 +65,19 @@ func runCLIInProcess(parent context.Context, argv []string, timeout time.Duratio
 		}
 	}
 	return result
+}
+
+func hasConfigArg(argv []string) bool {
+	for i := 0; i < len(argv); i++ {
+		arg := strings.TrimSpace(argv[i])
+		switch {
+		case arg == "--config", arg == "-c":
+			return true
+		case strings.HasPrefix(arg, "--config="):
+			return true
+		}
+	}
+	return false
 }
 
 func captureProcessStdio(run func(), maxBytes int) (string, string, error) {

@@ -50,7 +50,7 @@ func runDirectCLI(t *testing.T, argv []string) cliInvocationResult {
 	t.Helper()
 	exitCode := 0
 	stdout, stderr, err := captureProcessStdio(func() {
-		exitCode = runCLI(context.Background(), append([]string{"cli-365"}, argv...), cliAppOptions{})
+		exitCode = runCLI(context.Background(), append([]string{"cli-365"}, argv...), cliAppOptions{DisableDaemonForwarding: true})
 	}, 0)
 	if err != nil {
 		t.Fatalf("captureProcessStdio() error: %v", err)
@@ -87,7 +87,7 @@ func TestDaemonInProcessDispatchParity(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 
 	opts := daemonTestOptions(t)
-	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
+	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes, ""))
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -261,6 +261,44 @@ func TestCaptureProcessStdioMaxBytes(t *testing.T) {
 	}
 }
 
+func TestRunCLIInProcessInjectsDaemonConfigPath(t *testing.T) {
+	badConfigPath := filepath.Join(t.TempDir(), "bad-config.yaml")
+	if err := os.WriteFile(badConfigPath, []byte("daemon: ["), 0o600); err != nil {
+		t.Fatalf("write bad config: %v", err)
+	}
+
+	result := runCLIInProcess(context.Background(), []string{"help"}, 2*time.Second, 0, badConfigPath)
+	if result.ExitCode == 0 {
+		t.Fatalf("exit code = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(strings.ToLower(result.Stderr), "yaml") {
+		t.Fatalf("stderr = %q, want yaml parse error", result.Stderr)
+	}
+}
+
+func TestRunCLIInProcessPrefersExplicitConfigArg(t *testing.T) {
+	badConfigPath := filepath.Join(t.TempDir(), "bad-config.yaml")
+	if err := os.WriteFile(badConfigPath, []byte("daemon: ["), 0o600); err != nil {
+		t.Fatalf("write bad config: %v", err)
+	}
+
+	goodConfigPath := filepath.Join(t.TempDir(), "good-config.yaml")
+	if err := os.WriteFile(goodConfigPath, []byte("daemon:\n  enabled: false\n"), 0o600); err != nil {
+		t.Fatalf("write good config: %v", err)
+	}
+
+	result := runCLIInProcess(
+		context.Background(),
+		[]string{"--config", goodConfigPath, "help"},
+		2*time.Second,
+		0,
+		badConfigPath,
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr=%q)", result.ExitCode, result.Stderr)
+	}
+}
+
 func TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens(t *testing.T) {
 	stateHome := t.TempDir()
 	homeDir := t.TempDir()
@@ -279,7 +317,7 @@ func TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens(t *testing.T) {
 	}
 
 	opts := daemonTestOptions(t)
-	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes))
+	srv := daemon.NewServer(opts, daemonExecFunc(opts.MaxResponseBytes, ""))
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
