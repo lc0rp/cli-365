@@ -1,6 +1,10 @@
 # Binaries
 /cli-365
 /outlook-browser-cli
+/tmp/cli-365-release
+
+# Node tooling
+/node_modules/
 
 # IDE
 .idea/

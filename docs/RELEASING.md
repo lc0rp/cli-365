@@ -4,52 +4,52 @@ primary_audience: Builders
 owner: cli-365 maintainers
 last_verified: 2026-02-17
 next_review_by: 2026-03-17
-source_of_truth: ../scripts/release.sh
-read_when: Preparing a patch/minor/major release and git tag.
+source_of_truth: ../.releaserc.cjs
+read_when: Preparing a release or validating semantic-release/commitlint automation.
 ---
 
 # Releasing cli-365
 
-Use the release script to reduce manual error:
+Releases are fully semantic-release based. No manual `patch|minor|major` input.
+
+## How version bumps are decided
+
+- `fix:` and `perf:` commits => patch release
+- `feat:` commits => minor release
+- `BREAKING CHANGE:` footer or `!` marker => major release
+
+Commit format is enforced by commitlint in CI.
+
+## Default release flow
+
+1. Merge Conventional Commit messages into `main`.
+2. GitHub Actions `release.yml` runs semantic-release.
+3. semantic-release:
+   - computes next semver from commits
+   - updates `CHANGELOG.md`
+   - updates `VERSION` and `cmd/cli-365/version.go`
+   - runs release verification (`go test ./...`, build, `--version` check)
+   - creates commit `chore(release): X.Y.Z`
+   - creates annotated tag `vX.Y.Z`
+   - publishes GitHub Release
+
+## Local preview
 
 ```bash
-scripts/release.sh patch
-scripts/release.sh minor
-scripts/release.sh major
+scripts/release.sh --dry-run
 ```
 
-Optional flags:
+## Manual local run (rare)
 
 ```bash
-scripts/release.sh patch --dry-run
-scripts/release.sh patch --push
+scripts/release.sh
 ```
 
-## What the script does
+Requires `GITHUB_TOKEN` with repo write permissions.
 
-1. Validates clean git state on `main`.
-2. Fetches tags from `origin` and verifies branch is not behind upstream.
-3. Bumps `VERSION` (semver).
-4. Updates `cmd/cli-365/version.go`.
-5. Generates a new release section in `CHANGELOG.md`.
-6. Runs full test gate: `go test ./...`.
-7. Builds release binary with stamped version and verifies `--version`.
-8. Commits release files and creates annotated tag `vX.Y.Z`.
-9. Optionally pushes commit and tag when `--push` is set.
+## Files managed by release automation
 
-## Files touched per release
-
-- `VERSION`
 - `CHANGELOG.md`
+- `VERSION`
 - `cmd/cli-365/version.go`
 
-## After release
-
-If you did not use `--push`, publish manually:
-
-```bash
-git push origin HEAD
-git push origin vX.Y.Z
-```
-
-Then create a GitHub Release from the pushed tag.

@@ -1,0 +1,43 @@
+name: commitlint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint PR commits
+        if: github.event_name == 'pull_request'
+        run: |
+          npx commitlint \
+            --from "${{ github.event.pull_request.base.sha }}" \
+            --to "${{ github.sha }}" \
+            --verbose
+
+      - name: Lint push commits
+        if: github.event_name == 'push'
+        run: |
+          FROM_SHA="${{ github.event.before }}"
+          if [[ -z "$FROM_SHA" || "$FROM_SHA" =~ ^0+$ ]]; then
+            FROM_SHA="$(git rev-list --max-count=1 HEAD~1)"
+          fi
+          npx commitlint --from "$FROM_SHA" --to "${{ github.sha }}" --verbose
+

@@ -115,8 +115,10 @@ Available:
 
 ### Versioning (SemVer)
 
-`cli-365` uses semantic versioning for build output. The default local version is `0.0.0-dev`.
-Release builds should stamp the version at build time:
+`cli-365` uses semantic versioning for build output. Runtime version is sourced from
+`cmd/cli-365/version.go` and updated by semantic-release.
+
+Manual build stamping (optional):
 
 ```bash
 go build -ldflags "-X main.version=1.2.3" -o ~/.local/bin/cli-365 ./cmd/cli-365
@@ -130,15 +132,27 @@ cli-365 --version
 
 ### Release Automation
 
-Use the scripted release flow to bump semver, update changelog, run tests, and tag:
+Releases are commit-driven via semantic-release (Conventional Commits):
+- `fix:` / `perf:` => patch
+- `feat:` => minor
+- `BREAKING CHANGE` / `!` => major
+
+Default release happens in CI on push to `main` (`.github/workflows/release.yml`).
+
+Local preview:
 
 ```bash
-scripts/release.sh patch
-scripts/release.sh minor
-scripts/release.sh major
+scripts/release.sh --dry-run
 ```
 
-See `docs/RELEASING.md` for full workflow details and `--push` / `--dry-run` modes.
+Local execution (rare, requires `GITHUB_TOKEN`):
+
+```bash
+scripts/release.sh
+```
+
+Commit messages are enforced by commitlint (`.github/workflows/commitlint.yml`).
+See `docs/RELEASING.md` for full workflow details.
 
 ### Browser Management
 
