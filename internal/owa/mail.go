@@ -189,7 +189,19 @@ func resolveFolderID(page *rod.Page, tokens *Tokens, distinguished string) (stri
 	if len(wrapper.Body.Folders) == 0 {
 		return "", nil
 	}
-	return wrapper.Body.Folders[0].FolderId.Id, nil
+	resolvedID := wrapper.Body.Folders[0].FolderId.Id
+	rememberFolderID(tokens, distinguished, resolvedID)
+	return resolvedID, nil
+}
+
+func rememberFolderID(tokens *Tokens, distinguished string, folderID string) {
+	if tokens == nil || distinguished == "" || folderID == "" {
+		return
+	}
+	if tokens.Folders == nil {
+		tokens.Folders = map[string]string{}
+	}
+	tokens.Folders[distinguished] = folderID
 }
 
 func buildGetFolderRequest(distinguished string) map[string]interface{} {
@@ -1157,16 +1169,104 @@ func buildDraftRecipients(list []EmailAddress) []map[string]interface{} {
 }
 
 func buildMailboxInfo(tokens *Tokens) map[string]interface{} {
-	if tokens == nil || !strings.Contains(tokens.UserEmail, "@") {
+	mailboxAddress := mailboxSMTPAddress(tokens)
+	if mailboxAddress == "" {
 		return nil
+	}
+	userIdentity := strings.TrimSpace(tokens.UserEmail)
+	if userIdentity == "" {
+		userIdentity = mailboxAddress
 	}
 	return map[string]interface{}{
 		"type":               "UserMailbox",
-		"mailboxSmtpAddress": tokens.UserEmail,
-		"userIdentity":       tokens.UserEmail,
+		"mailboxSmtpAddress": mailboxAddress,
+		"userIdentity":       userIdentity,
 		"mailboxRank":        "Coprincipal",
 		"mailboxProvider":    "Office365",
 	}
+}
+
+func mailboxSMTPAddress(tokens *Tokens) string {
+	if tokens == nil {
+		return ""
+	}
+	userEmail := strings.TrimSpace(tokens.UserEmail)
+	if strings.Contains(userEmail, "@") {
+		return userEmail
+	}
+	anchor := strings.TrimSpace(tokens.Session.AnchorMailbox)
+	if anchor == "" {
+		return mailboxFromBearerTokens(tokens)
+	}
+	if idx := strings.Index(anchor, ":"); idx >= 0 && idx+1 < len(anchor) {
+		anchor = anchor[idx+1:]
+	}
+	anchor = strings.TrimSpace(anchor)
+	if strings.Contains(anchor, "@") {
+		return anchor
+	}
+	return mailboxFromBearerTokens(tokens)
+}
+
+func mailboxFromBearerTokens(tokens *Tokens) string {
+	if tokens == nil {
+		return ""
+	}
+	for _, raw := range []string{tokens.Bearer, tokens.GraphBearer, tokens.Substrate} {
+		if email := mailboxFromBearerToken(raw); email != "" {
+			return email
+		}
+	}
+	return ""
+}
+
+func mailboxFromBearerToken(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(raw), "bearer ") {
+		raw = strings.TrimSpace(raw[len("bearer "):])
+	}
+	parts := strings.Split(raw, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	payloadSeg := strings.TrimSpace(parts[1])
+	if payloadSeg == "" {
+		return ""
+	}
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(payloadSeg)
+	if err != nil {
+		payloadBytes, err = base64.URLEncoding.DecodeString(payloadSeg)
+		if err != nil {
+			return ""
+		}
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return ""
+	}
+	for _, key := range []string{"preferred_username", "upn", "email", "unique_name"} {
+		if value, ok := claims[key].(string); ok {
+			value = strings.TrimSpace(value)
+			if strings.Contains(value, "@") {
+				return value
+			}
+		}
+	}
+	if values, ok := claims["emails"].([]interface{}); ok {
+		for _, value := range values {
+			if email, ok := value.(string); ok {
+				email = strings.TrimSpace(email)
+				if strings.Contains(email, "@") {
+					return email
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func buildSendAs(tokens *Tokens, msg *Message) map[string]interface{} {

@@ -73,6 +73,8 @@ func hasConfigArg(argv []string) bool {
 		switch {
 		case arg == "--config", arg == "-c":
 			return true
+		case strings.HasPrefix(arg, "-c="):
+			return true
 		case strings.HasPrefix(arg, "--config="):
 			return true
 		}

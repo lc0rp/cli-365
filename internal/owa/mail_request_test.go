@@ -1,6 +1,10 @@
 package owa
 
-import "testing"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"testing"
+)
 
 func TestBuildGetItemRequest(t *testing.T) {
 	req, err := buildGetItemRequest("msg-1")
@@ -81,6 +85,43 @@ func TestBuildGetConversationItemsRequestMailboxInfo(t *testing.T) {
 	mailbox := body["MailboxInfo"].(map[string]interface{})
 	if mailbox["mailboxSmtpAddress"] != "user@example.com" {
 		t.Fatalf("mailboxSmtpAddress = %v", mailbox["mailboxSmtpAddress"])
+	}
+}
+
+func TestBuildMailboxInfoFallsBackToAnchorMailbox(t *testing.T) {
+	tokens := &Tokens{
+		Session: SessionHeaders{
+			AnchorMailbox: "SMTP:user.anchor@example.com",
+		},
+	}
+	mailbox := buildMailboxInfo(tokens)
+	if mailbox == nil {
+		t.Fatal("expected mailbox info")
+	}
+	if mailbox["mailboxSmtpAddress"] != "user.anchor@example.com" {
+		t.Fatalf("mailboxSmtpAddress = %v, want user.anchor@example.com", mailbox["mailboxSmtpAddress"])
+	}
+	if mailbox["userIdentity"] != "user.anchor@example.com" {
+		t.Fatalf("userIdentity = %v, want user.anchor@example.com", mailbox["userIdentity"])
+	}
+}
+
+func TestBuildMailboxInfoFallsBackToBearerClaims(t *testing.T) {
+	token := testJWTWithClaims(t, map[string]interface{}{
+		"preferred_username": "user.claims@example.com",
+	})
+	tokens := &Tokens{
+		Bearer: "Bearer " + token,
+	}
+	mailbox := buildMailboxInfo(tokens)
+	if mailbox == nil {
+		t.Fatal("expected mailbox info")
+	}
+	if mailbox["mailboxSmtpAddress"] != "user.claims@example.com" {
+		t.Fatalf("mailboxSmtpAddress = %v, want user.claims@example.com", mailbox["mailboxSmtpAddress"])
+	}
+	if mailbox["userIdentity"] != "user.claims@example.com" {
+		t.Fatalf("userIdentity = %v, want user.claims@example.com", mailbox["userIdentity"])
 	}
 }
 
@@ -198,4 +239,22 @@ func TestBuildGetFolderRequest(t *testing.T) {
 	if got := ids[0]["Id"]; got != "inbox" {
 		t.Fatalf("FolderIds[0].Id = %v", got)
 	}
+}
+
+func testJWTWithClaims(t *testing.T, claims map[string]interface{}) string {
+	t.Helper()
+	headerBytes, err := json.Marshal(map[string]interface{}{
+		"alg": "none",
+		"typ": "JWT",
+	})
+	if err != nil {
+		t.Fatalf("marshal jwt header: %v", err)
+	}
+	payloadBytes, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("marshal jwt claims: %v", err)
+	}
+	header := base64.RawURLEncoding.EncodeToString(headerBytes)
+	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
+	return header + "." + payload + ".sig"
 }

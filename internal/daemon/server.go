@@ -133,7 +133,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.lockFile = lockFile
 
-	if err := os.RemoveAll(s.opts.SocketPath); err != nil {
+	if err := removeStaleSocketPath(s.opts.SocketPath); err != nil {
 		_ = releaseFileLock(s.opts.LockPath, s.lockFile)
 		return err
 	}
@@ -222,6 +222,28 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		go s.handleConn(runCtx, conn)
 	}
+}
+
+func removeStaleSocketPath(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	mode := info.Mode()
+	if mode.IsDir() {
+		return fmt.Errorf("refusing to remove socket path directory: %s", path)
+	}
+	if mode&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to remove socket path symlink: %s", path)
+	}
+	if mode&os.ModeSocket != 0 || mode.IsRegular() || mode&os.ModeNamedPipe != 0 {
+		return os.Remove(path)
+	}
+	return fmt.Errorf("refusing to remove unsupported socket path type: %s", path)
 }
 
 func (s *Server) handleConn(parent context.Context, conn net.Conn) {
@@ -865,6 +887,8 @@ func (s *Server) writeSuppressionPathAndWindow(path string) (string, time.Durati
 		return "mail reply", s.opts.DuplicateWriteWindowMail
 	case path == "calendar create" || strings.HasPrefix(path, "calendar create "):
 		return "calendar create", s.opts.DuplicateWriteWindowCalendar
+	case path == "calendar add-directory" || strings.HasPrefix(path, "calendar add-directory "):
+		return "calendar add-directory", s.opts.DuplicateWriteWindowCalendar
 	default:
 		return "", 0
 	}
@@ -891,10 +915,20 @@ func (s *Server) checkWriteRateLimits(commandPath string, argv []string) (string
 		return ErrorCodeWriteThrottled, "global write rate limit exceeded"
 	}
 
+	var recipients []string
 	if s.opts.RecipientWriteRateLimitPerMinute > 0 {
-		recipients := extractWriteRecipients(writePath, argv)
+		for recipient, events := range s.recipientWriteSeen {
+			pruned := pruneTimesSince(events, windowStart)
+			if len(pruned) == 0 {
+				delete(s.recipientWriteSeen, recipient)
+				continue
+			}
+			s.recipientWriteSeen[recipient] = pruned
+		}
+
+		recipients = extractWriteRecipients(writePath, argv)
 		for _, recipient := range recipients {
-			events := pruneTimesSince(s.recipientWriteSeen[recipient], windowStart)
+			events := s.recipientWriteSeen[recipient]
 			if len(events) >= s.opts.RecipientWriteRateLimitPerMinute {
 				s.recipientWriteSeen[recipient] = events
 				return ErrorCodeWriteThrottled, "recipient write rate limit exceeded"
@@ -905,7 +939,6 @@ func (s *Server) checkWriteRateLimits(commandPath string, argv []string) (string
 
 	s.writeEvents = append(s.writeEvents, now)
 	if s.opts.RecipientWriteRateLimitPerMinute > 0 {
-		recipients := extractWriteRecipients(writePath, argv)
 		for _, recipient := range recipients {
 			s.recipientWriteSeen[recipient] = append(s.recipientWriteSeen[recipient], now)
 		}

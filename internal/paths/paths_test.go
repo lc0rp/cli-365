@@ -1,7 +1,9 @@
 package paths
 
 import (
+	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -154,5 +156,40 @@ func TestExpandUser(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHomeDirFallbacksToHOMEEnv(t *testing.T) {
+	origUserHomeDir := userHomeDirFunc
+	origCurrentUser := currentUserFunc
+	t.Cleanup(func() {
+		userHomeDirFunc = origUserHomeDir
+		currentUserFunc = origCurrentUser
+	})
+	userHomeDirFunc = func() (string, error) { return "", errors.New("boom") }
+	currentUserFunc = func() (*user.User, error) { return nil, errors.New("boom") }
+	t.Setenv("HOME", "/tmp/fallback-home")
+
+	got := HomeDir()
+	if got != "/tmp/fallback-home" {
+		t.Fatalf("HomeDir() = %q, want /tmp/fallback-home", got)
+	}
+}
+
+func TestHomeDirFallbacksToTempWhenAllLookupsFail(t *testing.T) {
+	origUserHomeDir := userHomeDirFunc
+	origCurrentUser := currentUserFunc
+	t.Cleanup(func() {
+		userHomeDirFunc = origUserHomeDir
+		currentUserFunc = origCurrentUser
+	})
+	userHomeDirFunc = func() (string, error) { return "", errors.New("boom") }
+	currentUserFunc = func() (*user.User, error) { return nil, errors.New("boom") }
+	t.Setenv("HOME", "")
+
+	want := filepath.Join(os.TempDir(), "cli-365-home")
+	got := HomeDir()
+	if got != want {
+		t.Fatalf("HomeDir() = %q, want %q", got, want)
 	}
 }

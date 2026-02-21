@@ -6,7 +6,7 @@ A command-line interface for Outlook Web App (OWA) using browser automation. Thi
 
 - **Browser-based authentication**: Uses your existing OWA session, no OAuth app registration needed
 - **Mail operations**: Search, view, reply, drafts, attachments (thread view is experimental)
-- **Calendar operations**: List, get, create, update, delete events
+- **Calendar operations**: List/get/create/update/delete events, add directory calendars
 - **Persistent sessions**: Browser profile persists between runs for seamless auth
 - **JSON output**: All commands support `--json` (global) for scripting
 
@@ -253,6 +253,10 @@ cli-365 calendar list
 # List events in a range
 cli-365 calendar list --start 2026-01-01 --end 2026-01-07
 
+# List events from a specific calendar by selector (name, email, or calendar_id)
+cli-365 calendar list --calendar "Alice Adams" --start 2026-01-01 --end 2026-01-07
+cli-365 calendar list --calendar "alice@example.com" --start 2026-01-01 --end 2026-01-07
+
 # Get a single event
 cli-365 calendar get <event-id>
 
@@ -264,11 +268,28 @@ cli-365 calendar update <event-id> --subject "Updated" --start 2026-01-02T10:00:
 
 # Delete an event
 cli-365 calendar delete <event-id>
+
+# List calendars (alias: folders)
+cli-365 calendar calendars
+
+# Add a colleague/resource calendar from directory (email)
+cli-365 calendar add-from-directory --email "alice@example.com"
+
+# Add from directory by name (uses directory lookup)
+cli-365 calendar add-from-directory --name "Alice Adams"
 ```
 
 Notes:
 - `calendar list` defaults to now → 7 days if `--start` is omitted.
+- `calendar list --calendar <selector>` resolves a calendar by exact `calendar_id`, exact name, or exact email and filters events to that calendar.
+- `--calendar` and `--folder` are mutually exclusive; use one.
 - Use `--attendee` and `--optional-attendee` multiple times to add attendees.
+- `calendar calendars` (alias: `calendar folders`) lists each calendar with `folder_id` and, when known, `calendar_id` and email metadata.
+- `calendar calendars` also includes directory calendars tracked in local registry (`~/.local/state/cli-365/added_calendars.json`) even when they are not returned by live `GetCalendarFolders`.
+- `calendar add-from-directory` (alias: `calendar add-directory`) accepts `--email`, `--name`, or a positional `[email-or-name]`.
+- `calendar add-from-directory` checks existing calendars first (exact name/email match) to avoid duplicate adds.
+- `calendar add-from-directory` may return `Calendar already added` with the existing `folder_id` / `calendar_id` instead of adding again.
+- Name lookup uses directory search and can fail on ambiguous matches (use `--email` or `--allow-ambiguous`).
 
 ### JSON Output
 
@@ -324,10 +345,14 @@ cli-365 --cdp-port 9222 mail search "invoice"
 
 By default (`daemon.enabled: true`), `mail`/`calendar` commands run through daemon preflight that ensures CDP/browser availability and performs auth recovery before command execution.
 
+Exception: `calendar add-from-directory` / `calendar add-directory` runs direct (non-daemon) by default unless `--daemon` is explicitly set. This command depends on in-page OWA calendar modules that may not be loaded in daemon-maintained tabs.
+
 ```bash
 cli-365 calendar list --limit 10
 # Disable daemon path for one run
 cli-365 --daemon=false calendar list --limit 10
+# Force daemon path for add-from-directory (not recommended unless you need it)
+cli-365 --daemon calendar add-from-directory --email "alice@example.com"
 ```
 
 ### Debug / Discovery
@@ -352,7 +377,7 @@ cli-365 debug capture --all-targets --netlog ./owa-capture.json
 - **Browser window not showing**: ensure a GUI is available and export `DISPLAY`/`XAUTHORITY` (e.g. `DISPLAY=:1 XAUTHORITY=$HOME/.Xauthority`).
 - **401 Unauthorized**: run `cli-365 auth login` to refresh tokens.
 - **500 OwaSerializationException**: capture a netlog (`cli-365 debug capture --netlog ...`) and re-run after login.
-- **Stale CDP**: use daemon mode (`--daemon`) and/or set `--cdp-port` to a known port.
+- **Stale CDP**: use daemon mode (`--daemon`) and/or set `--cdp-port` to a known port. For `calendar add-from-directory`, direct mode is default; use `--daemon` only if you explicitly need daemon routing.
 
 ## Known Issues
 

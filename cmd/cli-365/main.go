@@ -160,7 +160,19 @@ func shouldForwardViaDaemon(c *cli.Context, cfg config.Config, opts cliAppOption
 	if commandPath == "" || strings.HasPrefix(commandPath, "daemon") {
 		return false
 	}
+	// Directory calendar add currently relies on in-page OWA calendar modules that are
+	// not consistently available in daemon-maintained tabs. Run this command directly
+	// unless the caller explicitly forces daemon routing.
+	if shouldBypassDaemonByDefault(commandPath) && !c.IsSet("daemon") {
+		return false
+	}
 	return daemonFlagEnabled(c.IsSet("daemon"), c.Bool("daemon"), cfg.Daemon.Enabled)
+}
+
+func shouldBypassDaemonByDefault(commandPath string) bool {
+	path := strings.ToLower(strings.TrimSpace(commandPath))
+	return strings.HasPrefix(path, "calendar add-from-directory") ||
+		strings.HasPrefix(path, "calendar add-directory")
 }
 
 func daemonFlagEnabled(flagSet bool, flagValue bool, configEnabled bool) bool {

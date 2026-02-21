@@ -49,6 +49,13 @@ func TestShouldAttemptAuthRecoverySignals(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "mailbox info unavailable is not auth recovery",
+			commandPath: "calendar add-from-directory",
+			argv:        []string{"calendar", "add-from-directory", "Example User"},
+			result:      ExecResult{ExitCode: 1, Stderr: "mailbox info unavailable; unable to determine mailbox smtp address"},
+			want:        false,
+		},
+		{
 			name:        "auth login timeout triggers recovery",
 			commandPath: "auth login",
 			argv:        []string{"auth", "login"},

@@ -889,6 +889,9 @@ func shouldAttemptAuthRecovery(commandPath string, argv []string, result ExecRes
 	if result.Err != nil {
 		text += "\n" + strings.ToLower(result.Err.Error())
 	}
+	if strings.Contains(text, "mailbox info unavailable") {
+		return false
+	}
 	for _, needle := range []string{
 		"not logged in",
 		"auth login",

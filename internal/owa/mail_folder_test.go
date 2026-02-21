@@ -45,3 +45,16 @@ func TestResolveFolderInputUsesCache(t *testing.T) {
 		t.Fatalf("resolveFolderInput passthrough = %q, want folder-123", got)
 	}
 }
+
+func TestRememberFolderID(t *testing.T) {
+	tokens := &Tokens{}
+	rememberFolderID(tokens, "inbox", "folder-id-1")
+	if tokens.Folders["inbox"] != "folder-id-1" {
+		t.Fatalf("tokens.Folders[inbox] = %q, want folder-id-1", tokens.Folders["inbox"])
+	}
+
+	rememberFolderID(tokens, "inbox", "")
+	if tokens.Folders["inbox"] != "folder-id-1" {
+		t.Fatalf("tokens.Folders[inbox] changed on empty id: %q", tokens.Folders["inbox"])
+	}
+}

@@ -258,6 +258,8 @@ func getCanaryFromStartupData(page *rod.Page) (string, error) {
 
 func extractCanaryFromValue(v interface{}) string {
 	switch val := v.(type) {
+	case string:
+		return extractCanaryFromString(val)
 	case map[string]interface{}:
 		for key, child := range val {
 			if strings.Contains(strings.ToLower(key), "canary") {
@@ -280,12 +282,61 @@ func extractCanaryFromValue(v interface{}) string {
 }
 
 func extractCanaryFromString(raw string) string {
-	lower := strings.ToLower(raw)
-	idx := strings.Index(lower, "canary")
-	if idx < 0 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return ""
 	}
+
+	for _, key := range []string{"x-owa-canary", "owa-canary", "canary"} {
+		if token := extractTokenAfterKey(raw, key); token != "" {
+			return token
+		}
+	}
 	return ""
+}
+
+func extractTokenAfterKey(raw string, key string) string {
+	lower := strings.ToLower(raw)
+	searchFrom := 0
+	for {
+		rel := strings.Index(lower[searchFrom:], key)
+		if rel < 0 {
+			return ""
+		}
+		i := searchFrom + rel + len(key)
+		for i < len(raw) && isCanaryDelimiter(raw[i]) {
+			i++
+		}
+		if i >= len(raw) {
+			return ""
+		}
+		j := i
+		for j < len(raw) && !isCanaryValueTerminator(raw[j]) {
+			j++
+		}
+		if j > i {
+			return raw[i:j]
+		}
+		searchFrom = i
+	}
+}
+
+func isCanaryDelimiter(b byte) bool {
+	switch b {
+	case ' ', '\t', '\r', '\n', ':', '=', '"', '\'':
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanaryValueTerminator(b byte) bool {
+	switch b {
+	case ' ', '\t', '\r', '\n', ';', ',', '"', '\'', '}', ']':
+		return true
+	default:
+		return false
+	}
 }
 
 // getCanaryFromPage extracts canary from document.cookie or global variables.
@@ -638,12 +689,29 @@ func WaitForLoggedIn(page *rod.Page, timeout time.Duration) error {
 
 // SetCanaryCookie ensures the canary is set as a request header cookie.
 func SetCanaryCookie(page *rod.Page, canary string) error {
+	domain := "outlook.office.com"
+	if page != nil {
+		if info, err := page.Info(); err == nil && info != nil {
+			if resolved := canaryCookieDomainFromURL(info.URL); resolved != "" {
+				domain = resolved
+			}
+		}
+	}
+
 	return page.SetCookies([]*proto.NetworkCookieParam{
 		{
 			Name:   "X-OWA-CANARY",
 			Value:  canary,
-			Domain: "outlook.office.com",
+			Domain: domain,
 			Path:   "/",
 		},
 	})
+}
+
+func canaryCookieDomainFromURL(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parsed.Hostname())
 }

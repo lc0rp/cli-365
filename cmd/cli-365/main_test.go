@@ -54,6 +54,23 @@ func TestDaemonFlagEnabled(t *testing.T) {
 	}
 }
 
+func TestShouldBypassDaemonByDefault(t *testing.T) {
+	tests := []struct {
+		commandPath string
+		want        bool
+	}{
+		{commandPath: "calendar add-from-directory user@example.com", want: true},
+		{commandPath: "calendar add-directory Example User", want: true},
+		{commandPath: "calendar calendars", want: false},
+		{commandPath: "mail search sample", want: false},
+	}
+	for _, tt := range tests {
+		if got := shouldBypassDaemonByDefault(tt.commandPath); got != tt.want {
+			t.Fatalf("shouldBypassDaemonByDefault(%q) = %v, want %v", tt.commandPath, got, tt.want)
+		}
+	}
+}
+
 func TestBuildSearchQuery(t *testing.T) {
 	got, err := buildSearchQuery(
 		"alpha",

@@ -25,6 +25,10 @@ func TestPolicyCheckReadonly(t *testing.T) {
 		{"readonly: mail draft update", true, "mail draft update", true},
 		{"readonly: mail draft delete", true, "mail draft delete", true},
 		{"readonly: mail draft send", true, "mail draft send", true},
+		{"readonly: calendar create", true, "calendar create", true},
+		{"readonly: calendar update", true, "calendar update", true},
+		{"readonly: calendar delete", true, "calendar delete", true},
+		{"readonly: calendar add-directory", true, "calendar add-directory --email user@example.com", true},
 
 		// Non-readonly mode - all allowed
 		{"normal: mail send", false, "mail send", false},
@@ -159,6 +163,10 @@ func TestWriteCommandsMap(t *testing.T) {
 		"mail draft update",
 		"mail draft delete",
 		"mail draft send",
+		"calendar create",
+		"calendar update",
+		"calendar delete",
+		"calendar add-directory",
 	}
 
 	for _, cmd := range writeCmds {

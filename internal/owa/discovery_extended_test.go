@@ -17,13 +17,13 @@ func TestExtractCanaryFromValue(t *testing.T) {
 			want:  "test-canary-123",
 		},
 		{
-			name:  "nested canary",
+			name: "nested canary",
 			value: map[string]interface{}{
 				"settings": map[string]interface{}{
 					"owaCanary": "nested-canary-456",
 				},
 			},
-			want:  "nested-canary-456",
+			want: "nested-canary-456",
 		},
 		{
 			name:  "X-OWA-CANARY key",
@@ -31,15 +31,15 @@ func TestExtractCanaryFromValue(t *testing.T) {
 			want:  "xowa-canary-789",
 		},
 		{
-			name:  "canary in array without confusing keys",
+			name: "canary in array without confusing keys",
 			value: []interface{}{
 				map[string]interface{}{"other": "value"},
 				map[string]interface{}{"canaryToken": "array-canary-abc"},
 			},
-			want:  "array-canary-abc",
+			want: "array-canary-abc",
 		},
 		{
-			name:  "deeply nested",
+			name: "deeply nested",
 			value: map[string]interface{}{
 				"level1": map[string]interface{}{
 					"level2": map[string]interface{}{
@@ -49,7 +49,7 @@ func TestExtractCanaryFromValue(t *testing.T) {
 					},
 				},
 			},
-			want:  "deep-canary-xyz",
+			want: "deep-canary-xyz",
 		},
 		{
 			name:  "empty map",
@@ -86,6 +86,11 @@ func TestExtractCanaryFromValue(t *testing.T) {
 			value: map[string]interface{}{"oWaCanArY": "mixed-canary"},
 			want:  "mixed-canary",
 		},
+		{
+			name:  "string payload",
+			value: `{"X-OWA-CANARY":"string-canary"}`,
+			want:  "string-canary",
+		},
 	}
 
 	for _, tt := range tests {
@@ -117,7 +122,17 @@ func TestExtractCanaryFromString(t *testing.T) {
 		{
 			name:  "has canary keyword",
 			input: "prefix canary=abc123 suffix",
-			want:  "", // Note: current impl returns "" even with keyword
+			want:  "abc123",
+		},
+		{
+			name:  "json style key",
+			input: `{"X-OWA-CANARY":"json-canary"}`,
+			want:  "json-canary",
+		},
+		{
+			name:  "header style key",
+			input: "x-owa-canary:header-canary",
+			want:  "header-canary",
 		},
 	}
 
@@ -126,6 +141,28 @@ func TestExtractCanaryFromString(t *testing.T) {
 			got := extractCanaryFromString(tt.input)
 			if got != tt.want {
 				t.Errorf("extractCanaryFromString(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanaryCookieDomainFromURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "office.com", url: "https://outlook.office.com/mail/", want: "outlook.office.com"},
+		{name: "office365", url: "https://outlook.office365.com/mail/", want: "outlook.office365.com"},
+		{name: "with port", url: "https://outlook.live.com:8443/mail/", want: "outlook.live.com"},
+		{name: "invalid", url: "://bad", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := canaryCookieDomainFromURL(tt.url)
+			if got != tt.want {
+				t.Fatalf("canaryCookieDomainFromURL(%q) = %q, want %q", tt.url, got, tt.want)
 			}
 		})
 	}

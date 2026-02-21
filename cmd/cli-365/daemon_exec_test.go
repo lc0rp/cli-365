@@ -299,6 +299,29 @@ func TestRunCLIInProcessPrefersExplicitConfigArg(t *testing.T) {
 	}
 }
 
+func TestRunCLIInProcessPrefersExplicitConfigArgShortEquals(t *testing.T) {
+	badConfigPath := filepath.Join(t.TempDir(), "bad-config.yaml")
+	if err := os.WriteFile(badConfigPath, []byte("daemon: ["), 0o600); err != nil {
+		t.Fatalf("write bad config: %v", err)
+	}
+
+	goodConfigPath := filepath.Join(t.TempDir(), "good-config.yaml")
+	if err := os.WriteFile(goodConfigPath, []byte("daemon:\n  enabled: false\n"), 0o600); err != nil {
+		t.Fatalf("write good config: %v", err)
+	}
+
+	result := runCLIInProcess(
+		context.Background(),
+		[]string{"-c=" + goodConfigPath, "help"},
+		2*time.Second,
+		0,
+		badConfigPath,
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr=%q)", result.ExitCode, result.Stderr)
+	}
+}
+
 func TestDaemonInProcessDispatchParityAuthStatusWithCachedTokens(t *testing.T) {
 	stateHome := t.TempDir()
 	homeDir := t.TempDir()

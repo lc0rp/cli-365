@@ -556,6 +556,20 @@ func TestServerDuplicateWriteOverrideFlag(t *testing.T) {
 	}
 }
 
+func TestWriteSuppressionPathAndWindowCalendarAddDirectory(t *testing.T) {
+	opts := testOptions(t)
+	opts.DuplicateWriteWindowCalendar = 45 * time.Minute
+	srv := NewServer(opts, nil)
+
+	path, window := srv.writeSuppressionPathAndWindow("calendar add-directory --email user@example.com")
+	if path != "calendar add-directory" {
+		t.Fatalf("path = %q, want %q", path, "calendar add-directory")
+	}
+	if window != 45*time.Minute {
+		t.Fatalf("window = %s, want %s", window, 45*time.Minute)
+	}
+}
+
 func TestServerGlobalWriteRateLimit(t *testing.T) {
 	opts := testOptions(t)
 	opts.Allowlist = []string{"mail"}

@@ -34,12 +34,12 @@ var ReadonlyCommands = map[string]bool{
 	"daemon ping":   true,
 
 	// Mail read operations
-	"mail":               true,
-	"mail search":        true,
-	"mail view":          true,
-	"mail thread":        true,
-	"mail thread get":    true,
-	"mail attachments":   true,
+	"mail":                      true,
+	"mail search":               true,
+	"mail view":                 true,
+	"mail thread":               true,
+	"mail thread get":           true,
+	"mail attachments":          true,
 	"mail attachments list":     true,
 	"mail attachments download": true,
 
@@ -50,12 +50,16 @@ var ReadonlyCommands = map[string]bool{
 
 // WriteCommands are commands that modify data.
 var WriteCommands = map[string]bool{
-	"mail draft":        true,
-	"mail draft create": true,
-	"mail draft update": true,
-	"mail draft delete": true,
-	"mail draft send":   true,
-	"mail send":         true,
+	"mail draft":             true,
+	"mail draft create":      true,
+	"mail draft update":      true,
+	"mail draft delete":      true,
+	"mail draft send":        true,
+	"mail send":              true,
+	"calendar create":        true,
+	"calendar update":        true,
+	"calendar delete":        true,
+	"calendar add-directory": true,
 }
 
 // CheckReadonly returns an error if the command is not allowed in readonly mode.
