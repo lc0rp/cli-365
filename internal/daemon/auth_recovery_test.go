@@ -9,8 +9,15 @@ import (
 	"time"
 )
 
+func authRecoveryOptions(t *testing.T) Options {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	return testOptions(t)
+}
+
 func TestDefaultAuthRecoveryProbePrefersLiveSessionState(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	srv := NewServer(opts, func(_ context.Context, argv []string, _ time.Duration) ExecResult {
 		if len(argv) >= 2 && argv[0] == "auth" && argv[1] == "status" {
 			return ExecResult{
@@ -34,7 +41,7 @@ func TestDefaultAuthRecoveryProbePrefersLiveSessionState(t *testing.T) {
 }
 
 func TestDefaultAuthRecoveryProbeReturnsUnavailableSignal(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	srv := NewServer(opts, nil)
 	srv.sessionProbe = func(_ context.Context) (bool, error) {
 		return false, errSessionProbeUnavailable
@@ -50,7 +57,7 @@ func TestDefaultAuthRecoveryProbeReturnsUnavailableSignal(t *testing.T) {
 }
 
 func TestRunAuthRecoveryDoesNotExitEarlyFromCachedAuthStatus(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 80 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
@@ -80,7 +87,7 @@ func TestRunAuthRecoveryDoesNotExitEarlyFromCachedAuthStatus(t *testing.T) {
 }
 
 func TestRunAuthRecoveryRetriesSecureInputRunnerErrors(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 2 * time.Second
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
@@ -110,7 +117,7 @@ func TestRunAuthRecoveryRetriesSecureInputRunnerErrors(t *testing.T) {
 }
 
 func TestRunAuthRecoveryProbeUnavailableTriggersBrowserRecovery(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 250 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
@@ -146,7 +153,7 @@ func TestRunAuthRecoveryProbeUnavailableTriggersBrowserRecovery(t *testing.T) {
 }
 
 func TestAuthRecoverySuccessTransitionsToReady(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 250 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.LoginURL = "https://outlook.office.com/mail/"
@@ -208,7 +215,7 @@ func TestAuthRecoverySuccessTransitionsToReady(t *testing.T) {
 }
 
 func TestAuthRecoveryTimeoutTransitionsToFailedAndDrainsQueue(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 80 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
@@ -291,7 +298,7 @@ func TestAuthRecoveryTimeoutTransitionsToFailedAndDrainsQueue(t *testing.T) {
 }
 
 func TestAuthRecoveryStopsWhenDaemonStopRequested(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 5 * time.Second
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
@@ -332,7 +339,7 @@ func TestAuthRecoveryStopsWhenDaemonStopRequested(t *testing.T) {
 }
 
 func TestServerRejectsNewRequestsWhileAuthRecoveryPaused(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = time.Second
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.RejectNewWhilePaused = true
@@ -386,7 +393,7 @@ func TestServerRejectsNewRequestsWhileAuthRecoveryPaused(t *testing.T) {
 }
 
 func TestExecuteTaskAuthRequiredRunsRecoveryAndRetries(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 250 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 
@@ -435,7 +442,7 @@ func TestExecuteTaskAuthRequiredRunsRecoveryAndRetries(t *testing.T) {
 }
 
 func TestExecuteTaskAuthRecoveryTimeoutReturnsAuthTimeout(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 60 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 
@@ -592,7 +599,7 @@ func TestFirstURL(t *testing.T) {
 }
 
 func TestAuthRecoveryEmitsSecureInputURLNotification(t *testing.T) {
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 250 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.LoginURL = "https://outlook.office.com/mail/"
@@ -652,7 +659,7 @@ func TestAuthRecoveryEmitsSecureInputURLNotification(t *testing.T) {
 func TestAuthRecoveryInjectsCDPPortIntoSecureInputCommand(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	opts := testOptions(t)
+	opts := authRecoveryOptions(t)
 	opts.AuthRecoveryTimeout = 250 * time.Millisecond
 	opts.AuthProbeInterval = 5 * time.Millisecond
 	opts.SecureInputCommand = "secure-targeted-input"
