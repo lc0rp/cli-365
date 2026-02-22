@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/lc0rp/cli-365/compare/v1.0.0...v1.0.1) (2026-02-22)
+
+### Bug Fixes
+
+* **calendar:** fall back from stale daemon flag parsing ([ddee643](https://github.com/lc0rp/cli-365/commit/ddee64304926c568a127c7cc1ee7542eb0dda8c4))
+
 ## 1.0.0 (2026-02-22)
 
 ### Features
