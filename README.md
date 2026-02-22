@@ -137,6 +137,8 @@ Releases are commit-driven via semantic-release (Conventional Commits):
 - `feat:` => minor
 - `BREAKING CHANGE` / `!` => major
 
+Release tooling requires Node.js `>=22`.
+
 Default release happens in CI on push to `main` (`.github/workflows/release.yml`).
 
 Local preview:

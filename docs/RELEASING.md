@@ -2,8 +2,8 @@
 type: How-to
 primary_audience: Builders
 owner: cli-365 maintainers
-last_verified: 2026-02-17
-next_review_by: 2026-03-17
+last_verified: 2026-02-22
+next_review_by: 2026-03-22
 source_of_truth: ../.releaserc.cjs
 read_when: Preparing a release or validating semantic-release/commitlint automation.
 ---
@@ -11,6 +11,11 @@ read_when: Preparing a release or validating semantic-release/commitlint automat
 # Releasing cli-365
 
 Releases are fully semantic-release based. No manual `patch|minor|major` input.
+
+## Prerequisites
+
+- Node.js `>=22`
+- `GITHUB_TOKEN` with repo write permissions (for local run)
 
 ## How version bumps are decided
 
@@ -52,4 +57,3 @@ Requires `GITHUB_TOKEN` with repo write permissions.
 - `CHANGELOG.md`
 - `VERSION`
 - `cmd/cli-365/version.go`
-

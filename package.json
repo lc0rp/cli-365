@@ -3,7 +3,7 @@
   "private": true,
   "description": "Release and commitlint tooling for cli-365",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "release": "semantic-release",

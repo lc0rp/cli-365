@@ -31,6 +31,7 @@ jobs:
       - name: Run internal daemon tests
         env:
           GOCACHE: ${{ runner.temp }}/gocache
+          TMPDIR: /tmp
         run: |
           set -euo pipefail
           mkdir -p .tmp/ci
@@ -39,6 +40,7 @@ jobs:
       - name: Run daemon deterministic parity/e2e smoke tests
         env:
           GOCACHE: ${{ runner.temp }}/gocache
+          TMPDIR: /tmp
         run: |
           set -euo pipefail
           mkdir -p .tmp/ci
