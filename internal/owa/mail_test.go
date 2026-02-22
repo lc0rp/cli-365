@@ -64,9 +64,9 @@ func TestDraftConstruction(t *testing.T) {
 		{
 			name: "Draft with all fields",
 			draft: Draft{
-				Subject:      "Important Email",
-				ToRecipients: []EmailAddress{{Name: "To User", Address: "to@example.com"}},
-				CcRecipients: []EmailAddress{{Address: "cc@example.com"}},
+				Subject:       "Important Email",
+				ToRecipients:  []EmailAddress{{Name: "To User", Address: "to@example.com"}},
+				CcRecipients:  []EmailAddress{{Address: "cc@example.com"}},
 				BccRecipients: []EmailAddress{{Address: "bcc@example.com"}},
 				Body: &MessageBody{
 					BodyType: "Text",

@@ -209,9 +209,9 @@ func TestUpdateDraftChangesStructure(t *testing.T) {
 func TestMessageDispositionValues(t *testing.T) {
 	// Test OWA MessageDisposition values
 	dispositions := []string{
-		"SaveOnly",         // For drafts
-		"SendAndSaveCopy",  // For direct send
-		"SendOnly",         // Send without saving
+		"SaveOnly",        // For drafts
+		"SendAndSaveCopy", // For direct send
+		"SendOnly",        // Send without saving
 	}
 
 	for _, disp := range dispositions {
@@ -226,8 +226,8 @@ func TestMessageDispositionValues(t *testing.T) {
 func TestDeleteTypeValues(t *testing.T) {
 	// Test OWA DeleteType values
 	deleteTypes := []string{
-		"HardDelete",       // Permanent delete
-		"SoftDelete",       // Recoverable delete
+		"HardDelete",         // Permanent delete
+		"SoftDelete",         // Recoverable delete
 		"MoveToDeletedItems", // Move to trash
 	}
 

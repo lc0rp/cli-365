@@ -441,6 +441,9 @@ internal/
 # Run tests
 go test ./...
 
+# Ensure no ad-hoc Go probe files exist at repo root
+find . -maxdepth 1 -type f -name '*.go'
+
 # Build
 go build ./cmd/cli-365
 
@@ -450,7 +453,7 @@ go build ./cmd/cli-365
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.24.4+
 - Chromium browser (auto-downloaded by rod if not present)
 
 ## Notes

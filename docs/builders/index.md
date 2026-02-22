@@ -2,29 +2,33 @@
 type: Reference
 primary_audience: Builders
 owner: cli-365 maintainers
-last_verified: 2026-02-15
-next_review_by: 2026-03-15
-source_of_truth: ./specs/daemon-v1.md
-read_when: Working in cli-365 code or planning daemon-mode implementation.
+last_verified: 2026-02-22
+next_review_by: 2026-03-22
+source_of_truth: ./status/mvp-status.md
+read_when: Working in cli-365 code and selecting the next highest-leverage work.
 ---
 
 # Builders hub
 
 ## Current priority
 
-- Daemon mode v1 implementation from `docs/builders/specs/daemon-v1.md` (spec complete, code not started).
+- Stabilization and maintainability hardening after daemon-v1 rollout.
+- Keep CI/test/docs truth in sync with runtime behavior.
 
 ## Builder docs
 
-- `docs/builders/daemon-v1-implementation.md` (execution checklist for upcoming implementation)
+- `docs/builders/backlog/high-leverage-improvements.md`
+  (prioritized improvements from latest scan)
+- `docs/builders/daemon-v1-implementation.md`
+  (implementation checklist and phase history)
 - `docs/RELEASING.md` (semantic-release + commitlint workflow)
-- `docs/builders/specs/mvp-spec.md` (MVP architecture context)
+- `docs/builders/specs/mvp-spec.md` (legacy MVP snapshot; historical context only)
 - `docs/builders/status/mvp-status.md` (current capability status)
 - `docs/builders/backlog/daemon-v1-todo.md` (daemon-v1 epics/tasks)
 - `docs/builders/backlog/mvp-todo.md` (legacy/current MVP defects)
 
-## Before coding daemon v1
+## Next engineering priorities
 
-1. Re-read `docs/builders/specs/daemon-v1.md` decision snapshot and non-goals.
-2. Implement in phases (A-F) to keep PRs reviewable.
-3. Add tests per phase before merging.
+1. Land CI/runtime alignment tasks from `docs/builders/backlog/high-leverage-improvements.md`.
+2. Keep docs hubs and status pages aligned with shipped behavior.
+3. Split oversized files only after coverage remains stable.

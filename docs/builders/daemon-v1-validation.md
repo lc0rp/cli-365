@@ -21,7 +21,13 @@ Close final readiness item in `docs/builders/backlog/daemon-v1-todo.md`:
 Run full local gate first:
 
 ```bash
-GOCACHE=/tmp/gocache go test ./...
+GOCACHE=/tmp/gocache go test ./cmd/... ./internal/... -count=1
+```
+
+Ensure no ad-hoc Go probes exist at repo root:
+
+```bash
+find . -maxdepth 1 -type f -name '*.go'
 ```
 
 Run cross-build matrix to prove daemon code compiles for both target OS/arch sets:
@@ -53,6 +59,8 @@ Mark backlog item done when all are true:
 
 1. Local deterministic checks are green.
 2. Cross-build matrix is green.
-3. `daemon-e2e-smoke` workflow is green on both `ubuntu-latest` and `macos-latest` for the target commit.
+3. `daemon-e2e-smoke` workflow is green on both `ubuntu-latest` and
+   `macos-latest` for the target commit.
 
-If macOS fails, keep backlog item open and capture failure summary in `docs/builders/backlog/daemon-v1-todo.md`.
+If macOS fails, keep backlog item open and capture failure summary in
+`docs/builders/backlog/daemon-v1-todo.md`.

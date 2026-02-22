@@ -45,8 +45,8 @@ func TestOWAEndpointAllActions(t *testing.T) {
 
 func TestOWAEndpointForURLAllDomains(t *testing.T) {
 	domains := []struct {
-		pageURL       string
-		expectedHost  string
+		pageURL      string
+		expectedHost string
 	}{
 		{"https://outlook.office.com/mail/", "outlook.office.com"},
 		{"https://outlook.office365.com/mail/", "outlook.office365.com"},
@@ -225,7 +225,7 @@ func TestOWATimeZoneStructure(t *testing.T) {
 func TestOWAEndpointForURLUnknownDomain(t *testing.T) {
 	// Unknown domain should fall back to default
 	endpoint := OWAEndpointForURL("https://unknown.domain.com/mail/", "FindItem")
-	
+
 	// Should still return a valid endpoint (falls back to office.com)
 	if endpoint == "" {
 		t.Error("OWAEndpointForURL should return endpoint even for unknown domain")
@@ -234,7 +234,7 @@ func TestOWAEndpointForURLUnknownDomain(t *testing.T) {
 
 func TestOWAEndpointForURLEmptyURL(t *testing.T) {
 	endpoint := OWAEndpointForURL("", "FindItem")
-	
+
 	// Should fall back to default
 	if endpoint == "" {
 		t.Error("OWAEndpointForURL('', 'FindItem') should return default endpoint")

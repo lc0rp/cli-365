@@ -1,0 +1,60 @@
+name: go-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  go-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Guard root-level Go probes
+        run: |
+          set -euo pipefail
+          ROOT_GO="$(find . -maxdepth 1 -type f -name '*.go' -printf '%P\n' | sort)"
+          if [[ -n "$ROOT_GO" ]]; then
+            echo "Unexpected root-level Go files detected:"
+            echo "$ROOT_GO"
+            echo
+            echo "Move probes under .scratch/ to keep go test ./... deterministic."
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: |
+          set -euo pipefail
+          mapfile -t GO_FILES < <(git ls-files '*.go')
+          if [[ "${#GO_FILES[@]}" -eq 0 ]]; then
+            echo "No tracked Go files found."
+            exit 1
+          fi
+          UNFORMATTED="$(gofmt -l "${GO_FILES[@]}")"
+          if [[ -n "$UNFORMATTED" ]]; then
+            echo "Go files need formatting:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Vet
+        run: |
+          set -euo pipefail
+          go vet ./...
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          go test ./... -count=1

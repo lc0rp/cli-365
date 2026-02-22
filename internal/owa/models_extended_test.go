@@ -8,11 +8,11 @@ import (
 
 func TestUnmarshalSearchResponseVariants(t *testing.T) {
 	tests := []struct {
-		name          string
-		json          string
-		wantMessages  int
-		wantConvs     int
-		wantTotal     int
+		name         string
+		json         string
+		wantMessages int
+		wantConvs    int
+		wantTotal    int
 	}{
 		{
 			name: "body wrapper with items",
@@ -70,18 +70,18 @@ func TestUnmarshalSearchResponseVariants(t *testing.T) {
 			wantTotal:    42,
 		},
 		{
-			name:          "empty response",
-			json:          `{}`,
-			wantMessages:  0,
-			wantConvs:     0,
-			wantTotal:     0,
+			name:         "empty response",
+			json:         `{}`,
+			wantMessages: 0,
+			wantConvs:    0,
+			wantTotal:    0,
 		},
 		{
-			name: "empty body",
-			json: `{"Body": {}}`,
-			wantMessages:  0,
-			wantConvs:     0,
-			wantTotal:     0,
+			name:         "empty body",
+			json:         `{"Body": {}}`,
+			wantMessages: 0,
+			wantConvs:    0,
+			wantTotal:    0,
 		},
 	}
 

@@ -87,4 +87,3 @@ func ensureOWASuccess(body json.RawMessage) error {
 
 	return nil
 }
-

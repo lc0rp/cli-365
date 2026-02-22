@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install deps
@@ -40,4 +40,3 @@ jobs:
             FROM_SHA="$(git rev-list --max-count=1 HEAD~1)"
           fi
           npx commitlint --from "$FROM_SHA" --to "${{ github.sha }}" --verbose
-
