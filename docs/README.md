@@ -2,8 +2,8 @@
 type: Reference
 primary_audience: Builders
 owner: cli-365 maintainers
-last_verified: 2026-02-15
-next_review_by: 2026-03-15
+last_verified: 2026-02-22
+next_review_by: 2026-03-22
 source_of_truth: ../README.md
 read_when: Start docs work and route to the right audience/intention page.
 ---
@@ -19,8 +19,12 @@ Audience-first routing for repository docs. Keep pages intent-pure:
 
 ## Read when
 
-- Planning daemon implementation: `docs/builders/specs/daemon-v1.md`, `docs/builders/daemon-v1-implementation.md`, `docs/builders/backlog/daemon-v1-todo.md`.
-- Verifying current CLI behavior: `README.md`, `docs/builders/status/mvp-status.md`, `docs/builders/specs/mvp-spec.md`, `docs/builders/backlog/mvp-todo.md`.
+- Planning daemon implementation: `docs/builders/specs/daemon-v1.md`,
+  `docs/builders/daemon-v1-implementation.md`,
+  `docs/builders/backlog/daemon-v1-todo.md`.
+- Verifying current CLI behavior: `README.md`,
+  `docs/builders/status/mvp-status.md`, `docs/builders/specs/mvp-spec.md`,
+  `docs/builders/backlog/mvp-todo.md`.
 - Cutting a release/tag: `docs/RELEASING.md`.
 
 ## Audience hubs
@@ -29,7 +33,7 @@ Audience-first routing for repository docs. Keep pages intent-pure:
 - Release: `docs/RELEASING.md`
 - Testers: pending (add once daemon v1 tests land)
 - Operators: pending (add once daemon runbook exists)
-- Users: `README.md`
+- Users: `docs/users/index.md`
 
 ## Maintenance rules
 
