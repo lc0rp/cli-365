@@ -16,6 +16,8 @@ import (
 	"github.com/lc0rp/cli-365/internal/daemon"
 )
 
+var daemonCall = daemon.Call
+
 func runViaDaemon(c *cli.Context) error {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return cli.Exit(daemon.ErrUnsupportedPlatform.Error(), 1)
@@ -42,7 +44,7 @@ func runViaDaemon(c *cli.Context) error {
 		requestCDPPort = c.Int("cdp-port")
 	}
 
-	resp, err := daemon.Call(opts.SocketPath, daemon.Request{
+	resp, err := daemonCall(opts.SocketPath, daemon.Request{
 		RequestID:   fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid()),
 		SubmittedAt: time.Now().UTC(),
 		Command:     daemon.CommandExec,
@@ -53,6 +55,16 @@ func runViaDaemon(c *cli.Context) error {
 	}, callTimeout)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("%s: %v", daemon.ErrorCodeDaemonUnavailable, err), 1)
+	}
+	if shouldFallbackToInProcess(resp) {
+		args := append([]string{"cli-365"}, argv...)
+		exitCode := runCLI(c.Context, args, cliAppOptions{
+			DisableDaemonForwarding: true,
+		})
+		if exitCode != 0 {
+			return cli.Exit("", exitCode)
+		}
+		return cli.Exit("", 0)
 	}
 
 	if resp.Stdout != "" {
@@ -65,6 +77,13 @@ func runViaDaemon(c *cli.Context) error {
 		return cli.Exit("", resp.ExitCode)
 	}
 	return cli.Exit("", 0)
+}
+
+func shouldFallbackToInProcess(resp daemon.Response) bool {
+	if resp.ExitCode == 0 {
+		return false
+	}
+	return strings.Contains(strings.ToLower(resp.Stderr), "flag provided but not defined")
 }
 
 func computeDaemonTimeouts(opts daemon.Options) (time.Duration, time.Duration) {

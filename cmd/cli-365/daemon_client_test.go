@@ -100,3 +100,34 @@ func TestDetachDaemonProcess(t *testing.T) {
 		}
 	}
 }
+
+func TestShouldFallbackToInProcess(t *testing.T) {
+	t.Run("fallback on undefined flag from daemon", func(t *testing.T) {
+		resp := daemon.Response{
+			ExitCode: 1,
+			Stderr:   "Incorrect Usage: flag provided but not defined: -calendar\n",
+		}
+		if !shouldFallbackToInProcess(resp) {
+			t.Fatal("expected fallback for undefined flag error")
+		}
+	})
+
+	t.Run("no fallback on successful response", func(t *testing.T) {
+		resp := daemon.Response{
+			ExitCode: 0,
+		}
+		if shouldFallbackToInProcess(resp) {
+			t.Fatal("unexpected fallback for successful response")
+		}
+	})
+
+	t.Run("no fallback for non-flag error", func(t *testing.T) {
+		resp := daemon.Response{
+			ExitCode: 1,
+			Stderr:   "error: mailbox info unavailable",
+		}
+		if shouldFallbackToInProcess(resp) {
+			t.Fatal("unexpected fallback for non-flag error")
+		}
+	})
+}

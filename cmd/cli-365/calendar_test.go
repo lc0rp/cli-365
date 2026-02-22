@@ -1,11 +1,28 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/lc0rp/cli-365/internal/owa"
 )
+
+func TestCalendarListHelpIncludesCalendarSelectorFlag(t *testing.T) {
+	app := newCLIApp(cliAppOptions{DisableDaemonForwarding: true})
+	var out bytes.Buffer
+	app.Writer = &out
+	app.ErrWriter = &out
+
+	code := runCLIApp(context.Background(), app, []string{"cli-365", "calendar", "list", "--help"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "--calendar value") {
+		t.Fatalf("help output missing --calendar flag: %s", out.String())
+	}
+}
 
 func TestResolveCalendarDirectoryIdentity(t *testing.T) {
 	tests := []struct {

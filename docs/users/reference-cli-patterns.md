@@ -35,13 +35,18 @@ cli-365 --json --daemon=false mail search "invoice" --limit 5
 
 ## Calendar targeting pattern
 
-Current robust path for non-default calendars:
+Preferred path:
 
-1. List calendars/folders.
-2. Select `folder_id` by exact name/email from JSON.
-3. Pass `--folder <folder_id>` to `calendar list`.
+1. Use `--calendar` with exact name/email/calendar_id.
 
 Example:
+
+```bash
+cli-365 calendar list --calendar "Alice Adams" --start 2026-02-22 --end 2026-02-28
+cli-365 calendar list --calendar "alice@example.com" --start 2026-02-22 --end 2026-02-28
+```
+
+Fallback path (when you already have `folder_id`):
 
 ```bash
 FOLDER_ID=$(cli-365 --json calendar calendars | \
@@ -83,6 +88,7 @@ Date formats accepted by query builder flags:
 - `mail view --index N` and `mail reply #N` require a prior `mail search` cache.
 - Daemon bypass default applies to `calendar add-from-directory`.
 - `--readonly` blocks write operations (`send`, `draft`, calendar writes).
+- If daemon is stale after binary update, restart with `daemon stop/start`.
 
 ## Version notes
 

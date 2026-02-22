@@ -75,6 +75,8 @@ cli-365 debug capture --netlog ./owa-capture.json
 
 - `daemon auth recovery failed`: re-login; retry command in direct mode.
 - `No help topic for ...`: command name changed; run `cli-365 <group> --help`.
+- `flag provided but not defined: -calendar`: daemon is likely stale; restart
+  daemon and retry.
 - `failed to parse ...`: capture netlog and include exact error payload.
 - `mailbox info unavailable`: prefer `--email` over ambiguous names.
 

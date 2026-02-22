@@ -46,7 +46,14 @@ cli-365 calendar add-from-directory --name "Alice Adams"
 
 1. List events for a non-default calendar.
 
-Use `folder_id` from `calendar calendars` output:
+Use selector by name/email/calendar_id:
+
+```bash
+cli-365 calendar list --calendar "Alice Adams" --start 2026-02-22 --end 2026-02-28
+cli-365 calendar list --calendar "alice@example.com" --start 2026-02-22 --end 2026-02-28
+```
+
+Or use `folder_id` from `calendar calendars` output:
 
 ```bash
 cli-365 calendar list --folder "<folder-id>" --start 2026-02-22 --end 2026-02-28
@@ -73,6 +80,8 @@ cli-365 calendar delete <event-id>
   duplicate add.
 - `daemon auth recovery failed` during directory add: retry without forcing
   daemon (`add-from-directory` defaults to direct mode).
+- `flag provided but not defined: -calendar`: daemon may be running an older
+  binary; run `cli-365 daemon stop` then `cli-365 daemon start`.
 
 ## Next steps
 

@@ -264,7 +264,11 @@ cli-365 calendar list
 # List events in a range
 cli-365 calendar list --start 2026-01-01 --end 2026-01-07
 
-# List events from a specific calendar/folder
+# List events from a specific calendar by selector (name, email, or calendar_id)
+cli-365 calendar list --calendar "Alice Adams" --start 2026-01-01 --end 2026-01-07
+cli-365 calendar list --calendar "alice@example.com" --start 2026-01-01 --end 2026-01-07
+
+# List events from a specific calendar/folder ID
 cli-365 calendar list --folder "<folder-id>" --start 2026-01-01 --end 2026-01-07
 
 # Get a single event
@@ -291,7 +295,8 @@ cli-365 calendar add-from-directory --name "Alice Adams"
 
 Notes:
 - `calendar list` defaults to now → 7 days if `--start` is omitted.
-- `calendar list` filters by `--folder` (default folder is `calendar`).
+- `calendar list --calendar <selector>` resolves by exact `calendar_id`, exact name, or exact email.
+- `--calendar` and `--folder` are mutually exclusive; use one.
 - Use `--attendee` and `--optional-attendee` multiple times to add attendees.
 - `calendar calendars` (alias: `calendar folders`) lists each calendar with `folder_id` and, when known, `calendar_id` and email metadata.
 - `calendar calendars` also includes directory calendars tracked in local registry (`~/.local/state/cli-365/added_calendars.json`) even when they are not returned by live `GetCalendarFolders`.
@@ -299,11 +304,11 @@ Notes:
 - `calendar add-from-directory` checks existing calendars first (exact name/email match) to avoid duplicate adds.
 - `calendar add-from-directory` may return `Calendar already added` with the existing `folder_id` / `calendar_id` instead of adding again.
 - Name lookup uses directory search and can fail on ambiguous matches (use `--email` or `--allow-ambiguous`).
-- To target by name/email, resolve to `folder_id` first:
+- If daemon has not been restarted after a binary update, new flags may be rejected by old daemon process state. Restart daemon:
 
 ```bash
-FOLDER_ID=$(cli-365 --json calendar calendars | jq -r '.[] | select(.name=="Alice Adams") | .folder_id')
-cli-365 calendar list --folder "$FOLDER_ID" --start 2026-01-01 --end 2026-01-07
+cli-365 daemon stop
+cli-365 daemon start
 ```
 
 ### JSON Output
