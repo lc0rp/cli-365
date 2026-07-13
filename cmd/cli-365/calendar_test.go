@@ -201,7 +201,7 @@ func TestResolveCalendarListFolderFromSelectorByEmail(t *testing.T) {
 
 func TestResolveCalendarListFolderFromSelectorByCalendarID(t *testing.T) {
 	items := []calendarListItem{
-		{Name: "Example User", Email: "user@example.com", FolderID: "folder-sample", CalendarID: "opaque-calendar-id"},
+		{Name: "Example User", Email: "user@example.com", FolderID: "folder-sample", CalendarID: "AAExampleOpaqueCalendarID0123456789"},
 	}
 	got, err := resolveCalendarListFolderFromSelector(items, "AAExampleOpaqueCalendarID0123456789")
 	if err != nil {
