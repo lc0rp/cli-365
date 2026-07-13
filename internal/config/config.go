@@ -114,9 +114,30 @@ func Default() Config {
 
 func ResolvePath(path string) string {
 	if path == "" {
+		if envPath := os.Getenv("CLI365_CONFIG_PATH"); envPath != "" {
+			return paths.ExpandUser(envPath)
+		}
 		return paths.ConfigPath()
 	}
 	return paths.ExpandUser(path)
+}
+
+func applyEnvOverrides(cfg *Config) {
+	if value := os.Getenv("CLI365_PROFILE_DIR"); value != "" {
+		cfg.ProfileDir = paths.ExpandUser(value)
+	}
+	if value := os.Getenv("CLI365_CDP_ENDPOINT"); value != "" {
+		cfg.Browser.CDPEndpoint = value
+	}
+	if value := os.Getenv("CLI365_ACCOUNT_HINT"); value != "" {
+		cfg.Auth.AccountHint = value
+	}
+	if value := os.Getenv("CLI365_SECURE_INPUT_COMMAND"); value != "" {
+		cfg.Auth.SecureInput = value
+	}
+	if value := os.Getenv("CLI365_NOTIFY_TARGET"); value != "" {
+		cfg.Daemon.Notify.Target = value
+	}
 }
 
 func Load(path string) (Config, error) {
@@ -125,6 +146,7 @@ func Load(path string) (Config, error) {
 	data, err := os.ReadFile(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
+			applyEnvOverrides(&cfg)
 			return cfg, nil
 		}
 		return cfg, err
@@ -137,6 +159,7 @@ func Load(path string) (Config, error) {
 	} else {
 		cfg.ProfileDir = paths.ExpandUser(cfg.ProfileDir)
 	}
+	applyEnvOverrides(&cfg)
 	return cfg, nil
 }
 

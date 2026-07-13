@@ -35,6 +35,18 @@ go build -o ~/.local/bin/cli-365 ./cmd/cli-365
 
 Configuration file: `~/.config/cli-365/config.yaml`
 
+Machine-specific paths and account hints can be kept in an ignored `.env` file:
+
+```bash
+cp .env.example .env
+set -a
+source .env
+set +a
+```
+
+Environment values override the corresponding configuration fields. Authentication
+tokens remain in the configured keyring and should never be placed in `.env`.
+
 ```yaml
 profile_dir: "~/.config/cli-365/profile"
 browser:

@@ -15,6 +15,24 @@
 
 # Debug output
 owa-*.json
+*.ndjson
+*.log
+
+# Local credentials and environment
+.env
+.env.*
+!.env.example
+client_secret*.json
+credentials*.json
+token*.json
+*.pem
+*.p12
+*.pfx
+
+# Browser and runtime state
+profile/
+logs/
+data/
 
 # Local probe/scratch files
 tmp_*.go

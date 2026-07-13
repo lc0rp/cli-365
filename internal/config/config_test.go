@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,6 +73,34 @@ func TestLoadNonExistent(t *testing.T) {
 	// Should return defaults
 	if cfg.Auth.Tenant != "common" {
 		t.Errorf("Auth.Tenant = %q, want common", cfg.Auth.Tenant)
+	}
+}
+
+func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
+	t.Setenv("CLI365_PROFILE_DIR", "~/custom-profile")
+	t.Setenv("CLI365_CDP_ENDPOINT", "http://127.0.0.1:9222")
+	t.Setenv("CLI365_ACCOUNT_HINT", "user@example.com")
+	t.Setenv("CLI365_SECURE_INPUT_COMMAND", "/opt/tools/secure-input")
+	t.Setenv("CLI365_NOTIFY_TARGET", "local-notifications")
+
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !strings.HasSuffix(cfg.ProfileDir, "/custom-profile") {
+		t.Fatalf("ProfileDir = %q", cfg.ProfileDir)
+	}
+	if cfg.Browser.CDPEndpoint != "http://127.0.0.1:9222" {
+		t.Fatalf("CDPEndpoint = %q", cfg.Browser.CDPEndpoint)
+	}
+	if cfg.Auth.AccountHint != "user@example.com" {
+		t.Fatalf("AccountHint = %q", cfg.Auth.AccountHint)
+	}
+	if cfg.Auth.SecureInput != "/opt/tools/secure-input" {
+		t.Fatalf("SecureInput = %q", cfg.Auth.SecureInput)
+	}
+	if cfg.Daemon.Notify.Target != "local-notifications" {
+		t.Fatalf("Notify.Target = %q", cfg.Daemon.Notify.Target)
 	}
 }
 
