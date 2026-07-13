@@ -1,6 +1,6 @@
 # cli-365
 
-A command-line interface for Outlook Web App (OWA) using browser automation. This tool allows you to interact with your Outlook mail through the command line, leveraging OWA's web interface for authentication and API access.
+CLI 365 is an agent-friendly cli tool for automating outlook mail and exchange calendar interactions. It autoenticates using Outlook Web Access (OWA) via browser automation and supports persistent sessions and JSON output. With this tool, you can interact with your Outlook mail through the command line, leveraging OWA's web interface for authentication and API access.
 
 ## Features
 
